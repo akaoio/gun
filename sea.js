@@ -1413,10 +1413,11 @@
           let base64 = "";
           for(let i = 0; i < hexStr.length; i++) {
             base64 += !(i - 1 & 1) ? String.fromCharCode(parseInt(hexStr.substring(i - 1, i + 1), 16)) : ""}
-          return btoa(base64);}  
-        if(data && data === key.split('#').slice(-1)[0]){ return eve.to.next(msg) }
-          else if (data && data === hexToBase64(key.split('#').slice(-1)[0])){ 
-          return eve.to.next(msg) }
+          return btoa(base64);}
+        var hash = key.split('#').slice(-1)[0]
+        var slice = hash.slice(-20)
+        if (data && ((data === hash) || (data === hexToBase64(hash)) || (data === slice || (data === hexToBase64(slice))))){ return eve.to.next(msg) }
+        // Get the last 20 characters of the hash
         no("Data hash not same as hash!");
       }, {name: 'SHA-256'});
     }
