@@ -58,6 +58,27 @@ describe('SEA', function(){
       })
     })*/
 
+    it('put with only signature, no auth', function (done){(async function(){
+      var gun = Gun();
+      var pair = await SEA.pair();
+      
+      // Text
+      var raw = "hello crypto world";
+      var sig = await SEA.sign(raw, pair);
+      await gun.get(`~${pair.pub}`).get('test').put(sig);
+      var data = await gun.get(`~${pair.pub}`).get('test');
+      expect(data).to.be(raw);
+
+      // Number
+      var raw = 12345678910
+      var sig = await SEA.sign(raw, pair);
+      await gun.get(`~${pair.pub}`).get('test').put(sig);
+      var data = await gun.get(`~${pair.pub}`).get('test');
+      expect(data).to.be(raw);
+
+      done();
+    }())})
+
     it('generates deterministic key pairs from seed', async function () {
       this.timeout(5000); // Extend timeout if needed for async operations
       
@@ -67,16 +88,10 @@ describe('SEA', function(){
       const pair3 = await SEA.pair(null, { seed: "not my seed" });
 
       // Check if pairs with same seed are identical
-      const sameKeys = pair1.priv === pair2.priv && 
-                        pair1.pub === pair2.pub && 
-                        pair1.epriv === pair2.epriv && 
-                        pair1.epub === pair2.epub;
+      const sameKeys = pair1.priv === pair2.priv && pair1.pub === pair2.pub && pair1.epriv === pair2.epriv && pair1.epub === pair2.epub;
 
       // Check if pairs with different seeds are different
-      const differentKeys = pair1.priv !== pair3.priv && 
-                            pair1.pub !== pair3.pub && 
-                            pair1.epriv !== pair3.epriv && 
-                            pair1.epub !== pair3.epub;
+      const differentKeys = pair1.priv !== pair3.priv && pair1.pub !== pair3.pub && pair1.epriv !== pair3.epriv && pair1.epub !== pair3.epub;
 
       expect(sameKeys).to.be(true);
       expect(differentKeys).to.be(true);

@@ -1471,44 +1471,59 @@
         if (val === pub) return eve.to.next(msg) // the account MUST match `pub` property that equals the ID of the public key.
         return no("Account not same!")
       }
-
+      
+      // If user is authenticated
       if ((tmp = user.is) && tmp.pub && !raw['*'] && !raw['+'] && (pub === tmp.pub || (pub !== tmp.pub && ((msg._.msg || {}).opt || {}).cert))){
         SEA.opt.pack(msg.put, packed => {
           SEA.sign(packed, (user._).sea, async function(data) {
             if (u === data) return no(SEA.err || 'Signature fail.')
-            msg.put[':'] = {':': tmp = SEA.opt.unpack(data.m), '~': data.s}
-            msg.put['='] = tmp
-  
-            // if writing to own graph, just allow it
-            if (pub === user.is.pub) {
-              if (tmp = link_is(val)) (at.sea.own[tmp] = at.sea.own[tmp] || {})[pub] = 1
-              JSON.stringifyAsync(msg.put[':'], function(err,s){
-                if(err){ return no(err || "Stringify error.") }
-                msg.put[':'] = s;
-                return eve.to.next(msg);
-              })
-              return
-            }
-  
-            // if writing to other's graph, check if cert exists then try to inject cert into put, also inject self pub so that everyone can verify the put
-            if (pub !== user.is.pub && ((msg._.msg || {}).opt || {}).cert) {
-              const cert = await S.parse(msg._.msg.opt.cert)
-              // even if cert exists, we must verify it
-              if (cert && cert.m && cert.s)
-                verify(cert, user.is.pub, _ => {
-                  msg.put[':']['+'] = cert // '+' is a certificate
-                  msg.put[':']['*'] = user.is.pub // '*' is pub of the user who puts
-                  JSON.stringifyAsync(msg.put[':'], function(err,s){
-                    if(err){ return no(err || "Stringify error.") }
-                    msg.put[':'] = s;
-                    return eve.to.next(msg);
-                  })
-                  return
+              msg.put[':'] = {':': tmp = SEA.opt.unpack(data.m), '~': data.s}
+              msg.put['='] = tmp
+      
+              // if writing to own graph, just allow it
+              if (pub === user.is.pub) {
+                if (tmp = link_is(val)) (at.sea.own[tmp] = at.sea.own[tmp] || {})[pub] = 1
+                JSON.stringifyAsync(msg.put[':'], function(err,s){
+                  if(err){ return no(err || "Stringify error.") }
+                  msg.put[':'] = s;
+                  return eve.to.next(msg);
                 })
-            }
+                return
+              }
+      
+              // if writing to other's graph, check if cert exists then try to inject cert into put, also inject self pub so that everyone can verify the put
+              if (pub !== user.is.pub && ((msg._.msg || {}).opt || {}).cert) {
+                const cert = await S.parse(msg._.msg.opt.cert)
+                // even if cert exists, we must verify it
+                if (cert && cert.m && cert.s)
+                  verify(cert, user.is.pub, _ => {
+                    msg.put[':']['+'] = cert // '+' is a certificate
+                    msg.put[':']['*'] = user.is.pub // '*' is pub of the user who puts
+                    JSON.stringifyAsync(msg.put[':'], function(err,s){
+                      if(err){ return no(err || "Stringify error.") }
+                      msg.put[':'] = s;
+                      return eve.to.next(msg);
+                    })
+                    return
+                  })
+              }
           }, {raw: 1})
         })
         return;
+      }
+
+      // If user is not authenticated, but could provide a signature
+      if ((tmp == user.is) && !tmp && !raw['*'] && raw['m'] && raw['s'] ) {
+        SEA.opt.pack(msg.put, packed => {
+          SEA.verify(packed, pub, async function(data) {
+            if (u === data) return no("Unverified data.")
+            if (data == raw['m']) {
+              msg.put[':'] = JSON.stringify({':': raw['m'], '~': raw['s']})
+              msg.put['='] = data;
+              return eve.to.next(msg);
+            }
+          });
+        });
       }
 
       SEA.opt.pack(msg.put, packed => {
