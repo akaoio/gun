@@ -1,3 +1,5 @@
+const exp = require('constants');
+
 var root;
 var Gun;
 (function(){
@@ -790,27 +792,20 @@ describe('SEA', function(){
 
   });
 
-  // describe.skip('Frozen', function () {
-  //   it('Across spaces', function(done){
-  //     var gun = Gun();
-  //     var user = gun.user();
-
-  //     user.create('alice/as', 'password');
-      
-  //     gun.on('auth', async function(){
-
-  //       user.put({name: "Alice", country: "USA"});
-
-  //       var data = "hello world";
-  //       var hash = await SEA.work(data, null, null, {name: "SHA-256"});
-  //       gun.get('#users').get(hash).put(data);
-
-  //       console.log(1);
-  //       gun.get('#users').map()/*.get('country')*/.on(data => console.log(data));
-
-  //     });
-  //   });
-  // });
+  describe('Frozen', function () {
+    it('Across spaces', function(done){
+      (async function(){
+        var gun = Gun();
+        var sea = SEA;
+        var content = "hello world";
+        var address = (await sea.work(content, null, null, { name: "SHA-256", encode: "hex" })).slice(-20);
+        await gun.get("#test").get(address).put(content);
+        var check = await gun.get("#test").get(address);
+        expect(check).to.be(content);
+        done();
+      }())
+    });
+  });
 })
 
 }());
