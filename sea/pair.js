@@ -23,18 +23,18 @@
 
         // Generate deterministic keys if opt.seed is provided
         if (opt && opt.seed) {
-          const encoder = new shim.TextEncoder();
+          var encoder = new shim.TextEncoder();
 
           // Generate deterministic private keys using SHA-256
-          const signPrivateKeyBytes = new Uint8Array(
+          var signPrivateKeyBytes = new Uint8Array(
             await shim.subtle.digest('SHA-256', encoder.encode(opt.seed + '-sign'))
           );
-          const encryptPrivateKeyBytes = new Uint8Array(
+          var encryptPrivateKeyBytes = new Uint8Array(
             await shim.subtle.digest('SHA-256', encoder.encode(opt.seed + '-encrypt'))
           );
 
           // Convert to base64url format
-          const toBase64Url = buffer =>
+          var toBase64Url = buffer =>
             shim.Buffer.from(buffer)
               .toString('base64')
               .replace(/\+/g, '-')
@@ -42,32 +42,32 @@
               .replace(/=/g, '');
 
           // Format private keys
-          const signPriv = toBase64Url(signPrivateKeyBytes).slice(0, 43);
-          const encryptPriv = toBase64Url(encryptPrivateKeyBytes).slice(0, 43);
+          var signPriv = toBase64Url(signPrivateKeyBytes).slice(0, 43);
+          var encryptPriv = toBase64Url(encryptPrivateKeyBytes).slice(0, 43);
 
           // Generate public key components deterministically
-          const signPubXBytes = await shim.subtle.digest(
+          var signPubXBytes = await shim.subtle.digest(
             'SHA-256',
             encoder.encode(signPriv + '-x')
           );
-          const signPubYBytes = await shim.subtle.digest(
+          var signPubYBytes = await shim.subtle.digest(
             'SHA-256',
             encoder.encode(signPriv + '-y')
           );
-          const encryptPubXBytes = await shim.subtle.digest(
+          var encryptPubXBytes = await shim.subtle.digest(
             'SHA-256',
             encoder.encode(encryptPriv + '-x')
           );
-          const encryptPubYBytes = await shim.subtle.digest(
+          var encryptPubYBytes = await shim.subtle.digest(
             'SHA-256',
             encoder.encode(encryptPriv + '-y')
           );
 
           // Format public keys
-          const signPubX = toBase64Url(signPubXBytes).slice(0, 43);
-          const signPubY = toBase64Url(signPubYBytes).slice(0, 43);
-          const encryptPubX = toBase64Url(encryptPubXBytes).slice(0, 43);
-          const encryptPubY = toBase64Url(encryptPubYBytes).slice(0, 43);
+          var signPubX = toBase64Url(signPubXBytes).slice(0, 43);
+          var signPubY = toBase64Url(signPubYBytes).slice(0, 43);
+          var encryptPubX = toBase64Url(encryptPubXBytes).slice(0, 43);
+          var encryptPubY = toBase64Url(encryptPubYBytes).slice(0, 43);
 
           // Format the result
           var r = {

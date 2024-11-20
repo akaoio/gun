@@ -67,9 +67,9 @@
     SeaArray.prototype = Object.create(Array.prototype)
     SeaArray.prototype.toString = function (enc, start, end) {
       enc = enc || 'utf8'; start = start || 0;
-      const length = this.length
+      var length = this.length
       if (enc === 'hex') {
-        const buf = new Uint8Array(this)
+        var buf = new Uint8Array(this)
         return [...Array(((end && (end + 1)) || length) - start).keys()]
           .map((i) => buf[i + start].toString(16).padStart(2, '0')).join('')
       }
@@ -105,26 +105,26 @@
         if (!Object.keys(arguments).length || arguments[0] == null) {
           throw new TypeError('First argument must be a string, Buffer, ArrayBuffer, Array, or array-like object.')
         }
-        const input = arguments[0]
-        let buf
+        var input = arguments[0]
+        var buf
         if (typeof input === 'string') {
-          const enc = arguments[1] || 'utf8'
+          var enc = arguments[1] || 'utf8'
           if (enc === 'hex') {
-            const bytes = input.match(/([\da-fA-F]{2})/g)
+            var bytes = input.match(/([\da-fA-F]{2})/g)
               .map((byte) => parseInt(byte, 16))
             if (!bytes || !bytes.length) {
               throw new TypeError('Invalid first argument for type \'hex\'.')
             }
             buf = SeaArray.from(bytes)
           } else if (enc === 'utf8' || 'binary' === enc) { // EDIT BY MARK: I think this is safe, tested it against a couple "binary" strings. This lets SafeBuffer match NodeJS Buffer behavior more where it safely btoas regular strings.
-            const length = input.length
-            const words = new Uint16Array(length)
+            var length = input.length
+            var words = new Uint16Array(length)
             Array.from({ length: length }, (_, i) => words[i] = input.charCodeAt(i))
             buf = SeaArray.from(words)
           } else if (enc === 'base64') {
-            const dec = atob(input)
-            const length = dec.length
-            const bytes = new Uint8Array(length)
+            var dec = atob(input)
+            var length = dec.length
+            var bytes = new Uint8Array(length)
             Array.from({ length: length }, (_, i) => bytes[i] = dec.charCodeAt(i))
             buf = SeaArray.from(bytes)
           } else if (enc === 'binary') { // deprecated by above comment
@@ -134,10 +134,10 @@
           }
           return buf
         }
-        const byteLength = input.byteLength // what is going on here? FOR MARTTI
-        const length = input.byteLength ? input.byteLength : input.length
+        var byteLength = input.byteLength // what is going on here? FOR MARTTI
+        var length = input.byteLength ? input.byteLength : input.length
         if (length) {
-          let buf
+          var buf
           if (input instanceof ArrayBuffer) {
             buf = new Uint8Array(input)
           }
@@ -167,8 +167,8 @@
   })(USE, './buffer');
 
   ;USE(function(module){
-    const SEA = USE('./root')
-    const api = { Buffer: USE('./buffer') }
+    var SEA = USE('./root')
+    var api = { Buffer: USE('./buffer') }
     var o = {}, u;
 
     // ideally we can move away from JSON entirely? unlikely due to compatibility issues... oh well.
@@ -194,7 +194,7 @@
       api.random = (len) => api.Buffer.from(api.crypto.getRandomValues(new Uint8Array(api.Buffer.alloc(len))));
     }
     if (!api.TextDecoder) {
-      const { TextEncoder, TextDecoder } = require((u + '' == typeof MODULE ? '.' : '') + './lib/text-encoding', 1);
+      var { TextEncoder, TextDecoder } = require((u + '' == typeof MODULE ? '.' : '') + './lib/text-encoding', 1);
       api.TextDecoder = TextDecoder;
       api.TextEncoder = TextEncoder;
     }
@@ -205,7 +205,7 @@
           crypto,
           random: (len) => api.Buffer.from(crypto.randomBytes(len))
         });
-        const { Crypto: WebCrypto } = require('@peculiar/webcrypto', 1);
+        var { Crypto: WebCrypto } = require('@peculiar/webcrypto', 1);
         api.ossl = api.subtle = new WebCrypto({ directory: 'ossl' }).subtle // ECDH
       }
       catch (e) {
@@ -238,8 +238,8 @@
     };
 
     s.keyToJwk = function (keyBytes) {
-      const keyB64 = keyBytes.toString('base64');
-      const k = keyB64.replace(/\+/g, '-').replace(/\//g, '_').replace(/\=/g, '');
+      var keyB64 = keyBytes.toString('base64');
+      var k = keyB64.replace(/\+/g, '-').replace(/\//g, '_').replace(/\=/g, '');
       return { kty: 'oct', k: k, ext: false, alg: 'A256GCM' };
     }
 
@@ -273,10 +273,10 @@
 
   ;USE(function(module){
     // This internal func returns SHA-1 hashed data for KeyID generation
-    const __shim = USE('./shim')
-    const subtle = __shim.subtle
-    const ossl = __shim.ossl ? __shim.ossl : subtle
-    const sha1hash = (b) => ossl.digest({ name: 'SHA-1' }, new ArrayBuffer(b))
+    var __shim = USE('./shim')
+    var subtle = __shim.subtle
+    var ossl = __shim.ossl ? __shim.ossl : subtle
+    var sha1hash = (b) => ossl.digest({ name: 'SHA-1' }, new ArrayBuffer(b))
     module.exports = sha1hash
   })(USE, './sha1');
 
@@ -349,18 +349,18 @@
 
         // Generate deterministic keys if opt.seed is provided
         if (opt && opt.seed) {
-          const encoder = new shim.TextEncoder();
+          var encoder = new shim.TextEncoder();
 
           // Generate deterministic private keys using SHA-256
-          const signPrivateKeyBytes = new Uint8Array(
+          var signPrivateKeyBytes = new Uint8Array(
             await shim.subtle.digest('SHA-256', encoder.encode(opt.seed + '-sign'))
           );
-          const encryptPrivateKeyBytes = new Uint8Array(
+          var encryptPrivateKeyBytes = new Uint8Array(
             await shim.subtle.digest('SHA-256', encoder.encode(opt.seed + '-encrypt'))
           );
 
           // Convert to base64url format
-          const toBase64Url = buffer =>
+          var toBase64Url = buffer =>
             shim.Buffer.from(buffer)
               .toString('base64')
               .replace(/\+/g, '-')
@@ -368,32 +368,32 @@
               .replace(/=/g, '');
 
           // Format private keys
-          const signPriv = toBase64Url(signPrivateKeyBytes).slice(0, 43);
-          const encryptPriv = toBase64Url(encryptPrivateKeyBytes).slice(0, 43);
+          var signPriv = toBase64Url(signPrivateKeyBytes).slice(0, 43);
+          var encryptPriv = toBase64Url(encryptPrivateKeyBytes).slice(0, 43);
 
           // Generate public key components deterministically
-          const signPubXBytes = await shim.subtle.digest(
+          var signPubXBytes = await shim.subtle.digest(
             'SHA-256',
             encoder.encode(signPriv + '-x')
           );
-          const signPubYBytes = await shim.subtle.digest(
+          var signPubYBytes = await shim.subtle.digest(
             'SHA-256',
             encoder.encode(signPriv + '-y')
           );
-          const encryptPubXBytes = await shim.subtle.digest(
+          var encryptPubXBytes = await shim.subtle.digest(
             'SHA-256',
             encoder.encode(encryptPriv + '-x')
           );
-          const encryptPubYBytes = await shim.subtle.digest(
+          var encryptPubYBytes = await shim.subtle.digest(
             'SHA-256',
             encoder.encode(encryptPriv + '-y')
           );
 
           // Format public keys
-          const signPubX = toBase64Url(signPubXBytes).slice(0, 43);
-          const signPubY = toBase64Url(signPubYBytes).slice(0, 43);
-          const encryptPubX = toBase64Url(encryptPubXBytes).slice(0, 43);
-          const encryptPubY = toBase64Url(encryptPubYBytes).slice(0, 43);
+          var signPubX = toBase64Url(signPubXBytes).slice(0, 43);
+          var signPubY = toBase64Url(signPubYBytes).slice(0, 43);
+          var encryptPubX = toBase64Url(encryptPubXBytes).slice(0, 43);
+          var encryptPubY = toBase64Url(encryptPubYBytes).slice(0, 43);
 
           // Format the result
           var r = {
@@ -588,13 +588,13 @@
     var S = USE('./settings');
     var sha256hash = USE('./sha256');
 
-    const importGen = async (key, salt, opt) => {
-      //const combo = shim.Buffer.concat([shim.Buffer.from(key, 'utf8'), salt || shim.random(8)]).toString('utf8') // old
+    var importGen = async (key, salt, opt) => {
+      //var combo = shim.Buffer.concat([shim.Buffer.from(key, 'utf8'), salt || shim.random(8)]).toString('utf8') // old
       opt = opt || {};
-      const combo = key + (salt || shim.random(8)).toString('utf8'); // new
-      const hash = shim.Buffer.from(await sha256hash(combo), 'binary')
+      var combo = key + (salt || shim.random(8)).toString('utf8'); // new
+      var hash = shim.Buffer.from(await sha256hash(combo), 'binary')
 
-      const jwkKey = S.keyToJwk(hash)
+      var jwkKey = S.keyToJwk(hash)
       return await shim.subtle.importKey('jwk', jwkKey, { name: 'AES-GCM' }, false, ['encrypt', 'decrypt'])
     }
     module.exports = importGen;
@@ -781,19 +781,19 @@
 
         if (!certificants) return console.log("No certificant found.")
 
-        const expiry = opt.expiry && (typeof opt.expiry === 'number' || typeof opt.expiry === 'string') ? parseFloat(opt.expiry) : null
-        const readPolicy = (policy || {}).read ? policy.read : null
-        const writePolicy = (policy || {}).write ? policy.write : typeof policy === 'string' || Array.isArray(policy) || policy["+"] || policy["#"] || policy["."] || policy["="] || policy["*"] || policy[">"] || policy["<"] ? policy : null
+        var expiry = opt.expiry && (typeof opt.expiry === 'number' || typeof opt.expiry === 'string') ? parseFloat(opt.expiry) : null
+        var readPolicy = (policy || {}).read ? policy.read : null
+        var writePolicy = (policy || {}).write ? policy.write : typeof policy === 'string' || Array.isArray(policy) || policy["+"] || policy["#"] || policy["."] || policy["="] || policy["*"] || policy[">"] || policy["<"] ? policy : null
         // The "blacklist" feature is now renamed to "block". Why ? BECAUSE BLACK LIVES MATTER!
         // We can now use 3 keys: block, blacklist, ban
-        const block = (opt || {}).block || (opt || {}).blacklist || (opt || {}).ban || {}
-        const readBlock = block.read && (typeof block.read === 'string' || (block.read || {})['#']) ? block.read : null
-        const writeBlock = typeof block === 'string' ? block : block.write && (typeof block.write === 'string' || block.write['#']) ? block.write : null
+        var block = (opt || {}).block || (opt || {}).blacklist || (opt || {}).ban || {}
+        var readBlock = block.read && (typeof block.read === 'string' || (block.read || {})['#']) ? block.read : null
+        var writeBlock = typeof block === 'string' ? block : block.write && (typeof block.write === 'string' || block.write['#']) ? block.write : null
 
         if (!readPolicy && !writePolicy) return console.log("No policy found.")
 
         // reserved keys: c, e, r, w, rb, wb
-        const data = JSON.stringify({
+        var data = JSON.stringify({
           c: certificants,
           ...(expiry ? { e: expiry } : {}), // inject expiry if possible
           ...(readPolicy ? { r: readPolicy } : {}), // "r" stands for read, which means read permission.
@@ -802,7 +802,7 @@
           ...(writeBlock ? { wb: writeBlock } : {}), // inject WRITE block if possible
         })
 
-        const certificate = await SEA.sign(data, authority, null, { raw: 1 })
+        var certificate = await SEA.sign(data, authority, null, { raw: 1 })
 
         var r = certificate
         if (!opt.raw) { r = 'SEA' + JSON.stringify(r) }
@@ -846,16 +846,16 @@
     SEA.keyid = SEA.keyid || (async (pub) => {
       try {
         // base64('base64(x):base64(y)') => shim.Buffer(xy)
-        const pb = shim.Buffer.concat(
+        var pb = shim.Buffer.concat(
           pub.replace(/-/g, '+').replace(/_/g, '/').split('.')
             .map((t) => shim.Buffer.from(t, 'base64'))
         )
         // id is PGPv4 compliant raw key
-        const id = shim.Buffer.concat([
+        var id = shim.Buffer.concat([
           shim.Buffer.from([0x99, pb.length / 0x100, pb.length % 0x100]), pb
         ])
-        const sha1 = await sha1hash(id)
-        const hash = shim.Buffer.from(sha1, 'binary')
+        var sha1 = await sha1hash(id)
+        var hash = shim.Buffer.from(sha1, 'binary')
         return hash.toString('hex', hash.length - 8)  // 16-bit ID as hex
       } catch (e) {
         console.log(e)
@@ -1317,13 +1317,13 @@
     }
     User.prototype.alive = async function () {
       console.log("user.alive() IS DEPRECATED!!!");
-      const gunRoot = this.back(-1)
+      var gunRoot = this.back(-1)
       try {
         // All is good. Should we do something more with actual recalled data?
         await authRecall(gunRoot)
         return gunRoot._.user._
       } catch (e) {
-        const err = 'No session!'
+        var err = 'No session!'
         Gun.log(err)
         throw { err }
       }
@@ -1389,7 +1389,7 @@
      * @returns {Promise<any>}
      // Mark needs to review 1st before officially supported
     User.prototype.decrypt = function(cb) {
-      let gun = this,
+      var gun = this,
         path = ''
       gun.back(function(at) {
         if (at.is) {
@@ -1402,9 +1402,9 @@
           if (data == null) {
             return
           }
-          const user = gun.back(-1).user()
-          const pair = user.pair()
-          let sec = await user
+          var user = gun.back(-1).user()
+          var pair = user.pair()
+          var sec = await user
             .get('trust')
             .get(pair.pub)
             .get(path)
@@ -1412,7 +1412,7 @@
           if (!sec) {
             return data
           }
-          let decrypted = await SEA.decrypt(data, sec)
+          var decrypted = await SEA.decrypt(data, sec)
           return decrypted
         })
         .then(res => {
@@ -1441,7 +1441,7 @@
 
     // Alright, this next adapter gets run at the per node level in the graph database.
     // correction: 2020 it gets run on each key/value pair in a node upon a HAM diff.
-    // This will let us verify that every property on a node has a value signed by a public key we trust.
+    // This will var us verify that every property on a node has a value signed by a public key we trust.
     // If the signature does not match, the data is just `undefined` so it doesn't get passed on.
     // If it does match, then we transform the in-memory "view" of the data into its plain value (without the signature).
     // Now NOTE! Some data is "system" data, not user data. Example: List of public keys, aliases, etc.
@@ -1514,8 +1514,8 @@
     check.hash = function (eve, msg, val, key, soul, at, no) { // mark unbuilt @i001962 's epic hex contrib!
       SEA.work(val, null, function (data) {
         function hexToBase64(hexStr) {
-          let base64 = "";
-          for (let i = 0; i < hexStr.length; i++) {
+          var base64 = "";
+          for (var i = 0; i < hexStr.length; i++) {
             base64 += !(i - 1 & 1) ? String.fromCharCode(parseInt(hexStr.substring(i - 1, i + 1), 16)) : ""
           }
           return btoa(base64);
@@ -1545,10 +1545,10 @@
     // Complex verification for user account data including certificates
     check.pub = async function (eve, msg, val, key, soul, at, no, user, pub) {
       var tmp // Example: {_:#~asdf, hello:'world'~fdsa}}
-      const raw = await S.parse(val) || {}
+      var raw = await S.parse(val) || {}
 
       // Certificate verification helper function
-      const verify = (certificate, certificant, cb) => {
+      var verify = (certificate, certificant, cb) => {
         if (certificate.m && certificate.s && certificant && pub)
           // Verify certificate authenticity and permissions
           return SEA.verify(certificate, pub, data => { // check if "pub" (of the graph owner) really issued this cert
@@ -1557,10 +1557,10 @@
             // "data.w" = lex WRITE permission, in the future, there will be "data.r" which means lex READ permission
             if (u !== data && data.c && data.w && (data.c === certificant || data.c.indexOf('*') > -1 || data.c.indexOf(certificant) > -1)) {
               // ok, now "certificant" is in the "certificants" list, but is "path" allowed? Check path
-              let path = soul.indexOf('/') > -1 ? soul.replace(soul.substring(0, soul.indexOf('/') + 1), '') : ''
+              var path = soul.indexOf('/') > -1 ? soul.replace(soul.substring(0, soul.indexOf('/') + 1), '') : ''
               String.match = String.match || Gun.text.match
-              const w = Array.isArray(data.w) ? data.w : typeof data.w === 'object' || typeof data.w === 'string' ? [data.w] : []
-              for (const lex of w) {
+              var w = Array.isArray(data.w) ? data.w : typeof data.w === 'object' || typeof data.w === 'string' ? [data.w] : []
+              for (var lex of w) {
                 if ((String.match(path, lex['#']) && String.match(key, lex['.'])) || (!lex['.'] && String.match(path, lex['#'])) || (!lex['#'] && String.match(key, lex['.'])) || String.match((path ? path + '/' + key : key), lex['#'] || lex)) {
                   // is Certificant forced to present in Path
                   if (lex['+'] && lex['+'].indexOf('*') > -1 && path && path.indexOf(certificant) == -1 && key.indexOf(certificant) == -1) return no(`Path "${path}" or key "${key}" must contain string "${certificant}".`)
@@ -1609,7 +1609,7 @@
 
             // if writing to other's graph, check if cert exists then try to inject cert into put
             if (pub !== user.is.pub && ((msg._.msg || {}).opt || {}).cert) {
-              const cert = await S.parse(msg._.msg.opt.cert)
+              var cert = await S.parse(msg._.msg.opt.cert)
               // even if cert exists, we must verify it
               if (cert && cert.m && cert.s)
                 verify(cert, user.is.pub, _ => {

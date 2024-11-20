@@ -33,13 +33,13 @@
     }
     User.prototype.alive = async function () {
       console.log("user.alive() IS DEPRECATED!!!");
-      const gunRoot = this.back(-1)
+      var gunRoot = this.back(-1)
       try {
         // All is good. Should we do something more with actual recalled data?
         await authRecall(gunRoot)
         return gunRoot._.user._
       } catch (e) {
-        const err = 'No session!'
+        var err = 'No session!'
         Gun.log(err)
         throw { err }
       }
@@ -105,7 +105,7 @@
      * @returns {Promise<any>}
      // Mark needs to review 1st before officially supported
     User.prototype.decrypt = function(cb) {
-      let gun = this,
+      var gun = this,
         path = ''
       gun.back(function(at) {
         if (at.is) {
@@ -118,9 +118,9 @@
           if (data == null) {
             return
           }
-          const user = gun.back(-1).user()
-          const pair = user.pair()
-          let sec = await user
+          var user = gun.back(-1).user()
+          var pair = user.pair()
+          var sec = await user
             .get('trust')
             .get(pair.pub)
             .get(path)
@@ -128,7 +128,7 @@
           if (!sec) {
             return data
           }
-          let decrypted = await SEA.decrypt(data, sec)
+          var decrypted = await SEA.decrypt(data, sec)
           return decrypted
         })
         .then(res => {

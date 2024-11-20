@@ -36,19 +36,19 @@
 
         if (!certificants) return console.log("No certificant found.")
 
-        const expiry = opt.expiry && (typeof opt.expiry === 'number' || typeof opt.expiry === 'string') ? parseFloat(opt.expiry) : null
-        const readPolicy = (policy || {}).read ? policy.read : null
-        const writePolicy = (policy || {}).write ? policy.write : typeof policy === 'string' || Array.isArray(policy) || policy["+"] || policy["#"] || policy["."] || policy["="] || policy["*"] || policy[">"] || policy["<"] ? policy : null
+        var expiry = opt.expiry && (typeof opt.expiry === 'number' || typeof opt.expiry === 'string') ? parseFloat(opt.expiry) : null
+        var readPolicy = (policy || {}).read ? policy.read : null
+        var writePolicy = (policy || {}).write ? policy.write : typeof policy === 'string' || Array.isArray(policy) || policy["+"] || policy["#"] || policy["."] || policy["="] || policy["*"] || policy[">"] || policy["<"] ? policy : null
         // The "blacklist" feature is now renamed to "block". Why ? BECAUSE BLACK LIVES MATTER!
         // We can now use 3 keys: block, blacklist, ban
-        const block = (opt || {}).block || (opt || {}).blacklist || (opt || {}).ban || {}
-        const readBlock = block.read && (typeof block.read === 'string' || (block.read || {})['#']) ? block.read : null
-        const writeBlock = typeof block === 'string' ? block : block.write && (typeof block.write === 'string' || block.write['#']) ? block.write : null
+        var block = (opt || {}).block || (opt || {}).blacklist || (opt || {}).ban || {}
+        var readBlock = block.read && (typeof block.read === 'string' || (block.read || {})['#']) ? block.read : null
+        var writeBlock = typeof block === 'string' ? block : block.write && (typeof block.write === 'string' || block.write['#']) ? block.write : null
 
         if (!readPolicy && !writePolicy) return console.log("No policy found.")
 
         // reserved keys: c, e, r, w, rb, wb
-        const data = JSON.stringify({
+        var data = JSON.stringify({
           c: certificants,
           ...(expiry ? { e: expiry } : {}), // inject expiry if possible
           ...(readPolicy ? { r: readPolicy } : {}), // "r" stands for read, which means read permission.
@@ -57,7 +57,7 @@
           ...(writeBlock ? { wb: writeBlock } : {}), // inject WRITE block if possible
         })
 
-        const certificate = await SEA.sign(data, authority, null, { raw: 1 })
+        var certificate = await SEA.sign(data, authority, null, { raw: 1 })
 
         var r = certificate
         if (!opt.raw) { r = 'SEA' + JSON.stringify(r) }

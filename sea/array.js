@@ -7,9 +7,9 @@
     SeaArray.prototype = Object.create(Array.prototype)
     SeaArray.prototype.toString = function (enc, start, end) {
       enc = enc || 'utf8'; start = start || 0;
-      const length = this.length
+      var length = this.length
       if (enc === 'hex') {
-        const buf = new Uint8Array(this)
+        var buf = new Uint8Array(this)
         return [...Array(((end && (end + 1)) || length) - start).keys()]
           .map((i) => buf[i + start].toString(16).padStart(2, '0')).join('')
       }

@@ -16,7 +16,7 @@
 
     // Alright, this next adapter gets run at the per node level in the graph database.
     // correction: 2020 it gets run on each key/value pair in a node upon a HAM diff.
-    // This will let us verify that every property on a node has a value signed by a public key we trust.
+    // This will var us verify that every property on a node has a value signed by a public key we trust.
     // If the signature does not match, the data is just `undefined` so it doesn't get passed on.
     // If it does match, then we transform the in-memory "view" of the data into its plain value (without the signature).
     // Now NOTE! Some data is "system" data, not user data. Example: List of public keys, aliases, etc.
@@ -89,8 +89,8 @@
     check.hash = function (eve, msg, val, key, soul, at, no) { // mark unbuilt @i001962 's epic hex contrib!
       SEA.work(val, null, function (data) {
         function hexToBase64(hexStr) {
-          let base64 = "";
-          for (let i = 0; i < hexStr.length; i++) {
+          var base64 = "";
+          for (var i = 0; i < hexStr.length; i++) {
             base64 += !(i - 1 & 1) ? String.fromCharCode(parseInt(hexStr.substring(i - 1, i + 1), 16)) : ""
           }
           return btoa(base64);
@@ -120,10 +120,10 @@
     // Complex verification for user account data including certificates
     check.pub = async function (eve, msg, val, key, soul, at, no, user, pub) {
       var tmp // Example: {_:#~asdf, hello:'world'~fdsa}}
-      const raw = await S.parse(val) || {}
+      var raw = await S.parse(val) || {}
 
       // Certificate verification helper function
-      const verify = (certificate, certificant, cb) => {
+      var verify = (certificate, certificant, cb) => {
         if (certificate.m && certificate.s && certificant && pub)
           // Verify certificate authenticity and permissions
           return SEA.verify(certificate, pub, data => { // check if "pub" (of the graph owner) really issued this cert
@@ -132,10 +132,10 @@
             // "data.w" = lex WRITE permission, in the future, there will be "data.r" which means lex READ permission
             if (u !== data && data.c && data.w && (data.c === certificant || data.c.indexOf('*') > -1 || data.c.indexOf(certificant) > -1)) {
               // ok, now "certificant" is in the "certificants" list, but is "path" allowed? Check path
-              let path = soul.indexOf('/') > -1 ? soul.replace(soul.substring(0, soul.indexOf('/') + 1), '') : ''
+              var path = soul.indexOf('/') > -1 ? soul.replace(soul.substring(0, soul.indexOf('/') + 1), '') : ''
               String.match = String.match || Gun.text.match
-              const w = Array.isArray(data.w) ? data.w : typeof data.w === 'object' || typeof data.w === 'string' ? [data.w] : []
-              for (const lex of w) {
+              var w = Array.isArray(data.w) ? data.w : typeof data.w === 'object' || typeof data.w === 'string' ? [data.w] : []
+              for (var lex of w) {
                 if ((String.match(path, lex['#']) && String.match(key, lex['.'])) || (!lex['.'] && String.match(path, lex['#'])) || (!lex['#'] && String.match(key, lex['.'])) || String.match((path ? path + '/' + key : key), lex['#'] || lex)) {
                   // is Certificant forced to present in Path
                   if (lex['+'] && lex['+'].indexOf('*') > -1 && path && path.indexOf(certificant) == -1 && key.indexOf(certificant) == -1) return no(`Path "${path}" or key "${key}" must contain string "${certificant}".`)
@@ -184,7 +184,7 @@
 
             // if writing to other's graph, check if cert exists then try to inject cert into put
             if (pub !== user.is.pub && ((msg._.msg || {}).opt || {}).cert) {
-              const cert = await S.parse(msg._.msg.opt.cert)
+              var cert = await S.parse(msg._.msg.opt.cert)
               // even if cert exists, we must verify it
               if (cert && cert.m && cert.s)
                 verify(cert, user.is.pub, _ => {

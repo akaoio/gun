@@ -21,8 +21,8 @@
     };
 
     s.keyToJwk = function (keyBytes) {
-      const keyB64 = keyBytes.toString('base64');
-      const k = keyB64.replace(/\+/g, '-').replace(/\//g, '_').replace(/\=/g, '');
+      var keyB64 = keyBytes.toString('base64');
+      var k = keyB64.replace(/\+/g, '-').replace(/\//g, '_').replace(/\=/g, '');
       return { kty: 'oct', k: k, ext: false, alg: 'A256GCM' };
     }
 

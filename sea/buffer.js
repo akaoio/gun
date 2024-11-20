@@ -18,26 +18,26 @@
         if (!Object.keys(arguments).length || arguments[0] == null) {
           throw new TypeError('First argument must be a string, Buffer, ArrayBuffer, Array, or array-like object.')
         }
-        const input = arguments[0]
-        let buf
+        var input = arguments[0]
+        var buf
         if (typeof input === 'string') {
-          const enc = arguments[1] || 'utf8'
+          var enc = arguments[1] || 'utf8'
           if (enc === 'hex') {
-            const bytes = input.match(/([\da-fA-F]{2})/g)
+            var bytes = input.match(/([\da-fA-F]{2})/g)
               .map((byte) => parseInt(byte, 16))
             if (!bytes || !bytes.length) {
               throw new TypeError('Invalid first argument for type \'hex\'.')
             }
             buf = SeaArray.from(bytes)
           } else if (enc === 'utf8' || 'binary' === enc) { // EDIT BY MARK: I think this is safe, tested it against a couple "binary" strings. This lets SafeBuffer match NodeJS Buffer behavior more where it safely btoas regular strings.
-            const length = input.length
-            const words = new Uint16Array(length)
+            var length = input.length
+            var words = new Uint16Array(length)
             Array.from({ length: length }, (_, i) => words[i] = input.charCodeAt(i))
             buf = SeaArray.from(words)
           } else if (enc === 'base64') {
-            const dec = atob(input)
-            const length = dec.length
-            const bytes = new Uint8Array(length)
+            var dec = atob(input)
+            var length = dec.length
+            var bytes = new Uint8Array(length)
             Array.from({ length: length }, (_, i) => bytes[i] = dec.charCodeAt(i))
             buf = SeaArray.from(bytes)
           } else if (enc === 'binary') { // deprecated by above comment
@@ -47,10 +47,10 @@
           }
           return buf
         }
-        const byteLength = input.byteLength // what is going on here? FOR MARTTI
-        const length = input.byteLength ? input.byteLength : input.length
+        var byteLength = input.byteLength // what is going on here? FOR MARTTI
+        var length = input.byteLength ? input.byteLength : input.length
         if (length) {
-          let buf
+          var buf
           if (input instanceof ArrayBuffer) {
             buf = new Uint8Array(input)
           }

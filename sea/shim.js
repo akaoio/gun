@@ -1,7 +1,7 @@
 ;(function(){
 
-    const SEA = require('./root')
-    const api = { Buffer: require('./buffer') }
+    var SEA = require('./root')
+    var api = { Buffer: require('./buffer') }
     var o = {}, u;
 
     // ideally we can move away from JSON entirely? unlikely due to compatibility issues... oh well.
@@ -27,7 +27,7 @@
       api.random = (len) => api.Buffer.from(api.crypto.getRandomValues(new Uint8Array(api.Buffer.alloc(len))));
     }
     if (!api.TextDecoder) {
-      const { TextEncoder, TextDecoder } = require((u + '' == typeof MODULE ? '.' : '') + './lib/text-encoding', 1);
+      var { TextEncoder, TextDecoder } = require((u + '' == typeof MODULE ? '.' : '') + './lib/text-encoding', 1);
       api.TextDecoder = TextDecoder;
       api.TextEncoder = TextEncoder;
     }
@@ -38,7 +38,7 @@
           crypto,
           random: (len) => api.Buffer.from(crypto.randomBytes(len))
         });
-        const { Crypto: WebCrypto } = require('@peculiar/webcrypto', 1);
+        var { Crypto: WebCrypto } = require('@peculiar/webcrypto', 1);
         api.ossl = api.subtle = new WebCrypto({ directory: 'ossl' }).subtle // ECDH
       }
       catch (e) {
