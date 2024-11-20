@@ -5,6 +5,7 @@
     // After we have a GUN extension to make user registration/login easy, we then need to handle everything else.
 
     // We do this with a GUN adapter, we first listen to when a gun instance is created (and when its options change)
+    // This sets up the security middleware for each Gun instance
     Gun.on('opt', function(at){
       if(!at.sea){ // only add SEA once per instance, on the "at" context.
         at.sea = {own: {}};
@@ -28,9 +29,12 @@
     // This means we should ONLY trust our "friends" (our key ring) public keys, not any ones.
     // I have not yet added that to SEA yet in this alpha release. That is coming soon, but beware in the meanwhile!
 
+    // Main security check function - verifies data integrity and authenticity
     function check(msg){ // REVISE / IMPROVE, NO NEED TO PASS MSG/EVE EACH SUB?
       var eve = this, at = eve.as, put = msg.put, soul = put['#'], key = put['.'], val = put[':'], state = put['>'], id = msg['#'], tmp;
       if(!soul || !key){ return }
+
+      // Handle faith-based (trusted) puts - these bypass normal verification
       if((msg._||'').faith && (at.opt||'').faith && 'function' == typeof msg._){
         SEA.opt.pack(put, function(raw){
         SEA.verify(raw, false, function(data){ // this is synchronous if false
@@ -39,9 +43,13 @@
         })})
         return 
       }
+
+      // Error handler for security violations
       var no = function(why){ at.on('in', {'@': id, err: msg.err = why}) }; // exploit internal relay stun for now, maybe violates spec, but testing for now. // Note: this may be only the sharded message, not original batch.
       //var no = function(why){ msg.ack(why) };
       (msg._||'').DBG && ((msg._||'').DBG.c = +new Date);
+
+      // Handle data expiration/forgetting
       if(0 <= soul.indexOf('<?')){ // special case for "do not sync data X old" forget
         // 'a~pub.key/b<?9'
         tmp = parseFloat(soul.split('<?')[1]||'');
@@ -51,22 +59,32 @@
         }
       }
       
+      // Handle system data - alias list verification
       if('~@' === soul){  // special case for shared system data, the list of aliases.
         check.alias(eve, msg, val, key, soul, at, no); return;
       }
+
+      // Handle public key list verification
       if('~@' === soul.slice(0,2)){ // special case for shared system data, the list of public keys for an alias.
         check.pubs(eve, msg, val, key, soul, at, no); return;
       }
-      //if('~' === soul.slice(0,1) && 2 === (tmp = soul.slice(1)).split('.').length){ // special case, account data for a public key.
+
+      // Handle user account data verification
       if(tmp = SEA.opt.pub(soul)){ // special case, account data for a public key.
         check.pub(eve, msg, val, key, soul, at, no, at.user||'', tmp); return;
       }
+
+      // Handle content-addressed data verification
       if(0 <= soul.indexOf('#')){ // special case for content addressing immutable hashed data.
         check.hash(eve, msg, val, key, soul, at, no); return;
       } 
+
+      // Default verification for unsigned data
       check.any(eve, msg, val, key, soul, at, no, at.user||''); return;
       eve.to.next(msg); // not handled
     }
+
+    // Verify content-addressed data matches its hash
     check.hash = function(eve, msg, val, key, soul, at, no){ // mark unbuilt @i001962 's epic hex contrib!
       SEA.work(val, null, function(data){
         function hexToBase64(hexStr) {
@@ -81,21 +99,29 @@
         no("Data hash not same as hash!");
       }, {name: 'SHA-256'});
     }
+
+    // Verify alias data matches its reference
     check.alias = function(eve, msg, val, key, soul, at, no){ // Example: {_:#~@, ~@alice: {#~@alice}}
       if(!val){ return no("Data must exist!") } // data MUST exist
       if('~@'+key === link_is(val)){ return eve.to.next(msg) } // in fact, it must be EXACTLY equal to itself
       no("Alias not same!"); // if it isn't, reject.
     };
+
+    // Verify public key list entries
     check.pubs = function(eve, msg, val, key, soul, at, no){ // Example: {_:#~@alice, ~asdf: {#~asdf}}
       if(!val){ return no("Alias must exist!") } // data MUST exist
       if(key === link_is(val)){ return eve.to.next(msg) } // and the ID must be EXACTLY equal to its property
       no("Alias not same!"); // that way nobody can tamper with the list of public keys.
     };
+
+    // Complex verification for user account data including certificates
     check.pub = async function(eve, msg, val, key, soul, at, no, user, pub){ var tmp // Example: {_:#~asdf, hello:'world'~fdsa}}
       const raw = await S.parse(val) || {}
+
+      // Certificate verification helper function
       const verify = (certificate, certificant, cb) => {
         if (certificate.m && certificate.s && certificant && pub)
-          // now verify certificate
+          // Verify certificate authenticity and permissions
           return SEA.verify(certificate, pub, data => { // check if "pub" (of the graph owner) really issued this cert
             if (u !== data && u !== data.e && msg.put['>'] && msg.put['>'] > parseFloat(data.e)) return no("Certificate expired.") // certificate expired
             // "data.c" = a list of certificants/certified users
@@ -127,12 +153,13 @@
         return
       }
       
+      // Verify account public key matches
       if ('pub' === key && '~' + pub === soul) {
         if (val === pub) return eve.to.next(msg) // the account MUST match `pub` property that equals the ID of the public key.
         return no("Account not same!")
       }
       
-      // If user is authenticated
+      // Handle authenticated user writes
       if ((tmp = user.is) && tmp.pub && !raw['*'] && !raw['+'] && (pub === tmp.pub || (pub !== tmp.pub && ((msg._.msg || {}).opt || {}).cert))){
         SEA.opt.pack(msg.put, packed => {
           SEA.sign(packed, (user._).sea, async function(data) {
@@ -151,7 +178,7 @@
                 return
               }
       
-              // if writing to other's graph, check if cert exists then try to inject cert into put, also inject self pub so that everyone can verify the put
+              // if writing to other's graph, check if cert exists then try to inject cert into put
               if (pub !== user.is.pub && ((msg._.msg || {}).opt || {}).cert) {
                 const cert = await S.parse(msg._.msg.opt.cert)
                 // even if cert exists, we must verify it
@@ -172,7 +199,7 @@
         return;
       }
 
-      // If user is not authenticated, but could provide a signature
+      // Handle signed but unauthenticated writes
       if ((tmp == user.is) && !tmp && !raw['*'] && raw['m'] && raw['s'] ) {
         SEA.opt.pack(msg.put, packed => {
           SEA.verify(packed, pub, async function(data) {
@@ -186,6 +213,7 @@
         });
       }
 
+      // Handle general data verification
       SEA.opt.pack(msg.put, packed => {
         SEA.verify(packed, raw['*'] || pub, function(data){ var tmp;
           data = SEA.opt.unpack(data);
@@ -207,6 +235,8 @@
       })
       return
     };
+
+    // Default security check for unsigned data
     check.any = function(eve, msg, val, key, soul, at, no, user){ var tmp, pub;
       if(at.opt.secure){ return no("Soul missing public key at '" + key + "'.") }
       // TODO: Ask community if should auto-sign non user-graph data.
@@ -217,8 +247,10 @@
       return;
     }
 
+    // Utility functions and constants
     var valid = Gun.valid, link_is = function(d,l){ return 'string' == typeof (l = valid(d)) && l }, state_ify = (Gun.state||'').ify;
 
+    // Public key format validation regex
     var pubcut = /[^\w_-]/; // anything not alphanumeric or _ -
     SEA.opt.pub = function(s){
       if(!s){ return }
@@ -230,9 +262,13 @@
       s = s.slice(0,2).join('.');
       return s;
     }
+
+    // String type checking helper
     SEA.opt.stringy = function(t){
       // TODO: encrypt etc. need to check string primitive. Make as breaking change.
     }
+
+    // Data packing for verification
     SEA.opt.pack = function(d,cb,k, n,s){ var tmp, f; // pack for verifying
       if(SEA.opt.check(d)){ return cb(d) }
       if(d && d['#'] && d['.'] && d['>']){ tmp = d[':']; f = 1 }
@@ -242,6 +278,8 @@
         cb({m: {'#':s||d['#'],'.':k||d['.'],':':(meta||'')[':'],'>':d['>']||Gun.state.is(n, k)}, s: sig});
       });
     }
+
+    // Data unpacking helper
     var O = SEA.opt;
     SEA.opt.unpack = function(d, k, n){ var tmp;
       if(u === d){ return }
@@ -258,6 +296,8 @@
         return d;
       }
     }
+
+    // Security constants
     SEA.opt.shuffle_attack = 1546329600000; // Jan 1, 2019
     var fl = Math.floor; // TODO: Still need to fix inconsistent state issue.
     // TODO: Potential bug? If pub/priv key starts with `-`? IDK how possible.
