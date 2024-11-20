@@ -28,7 +28,7 @@
         // base64('base64(x):base64(y)') => shim.Buffer(xy)
         const pb = shim.Buffer.concat(
           pub.replace(/-/g, '+').replace(/_/g, '/').split('.')
-          .map((t) => shim.Buffer.from(t, 'base64'))
+            .map((t) => shim.Buffer.from(t, 'base64'))
         )
         // id is PGPv4 compliant raw key
         const id = shim.Buffer.concat([
@@ -51,7 +51,7 @@
     // But all other behavior needs to be equally easy, like opinionated ways of
     // Adding friends (trusted public keys), sending private messages, etc.
     // Cheers! Tell me what you think.
-    ((SEA.window||{}).GUN||{}).SEA = SEA;
+    ((SEA.window || {}).GUN || {}).SEA = SEA;
 
     module.exports = SEA
     // -------------- END SEA MODULES --------------------

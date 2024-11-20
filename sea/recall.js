@@ -1,20 +1,20 @@
 ;(function(){
 
     var User = require('./user'), SEA = User.SEA, Gun = User.GUN;
-    User.prototype.recall = function(opt, cb){
+    User.prototype.recall = function (opt, cb) {
       var gun = this, root = gun.back(-1), tmp;
       opt = opt || {};
-      if(opt && opt.sessionStorage){
-        if(SEA.window){
-          try{
+      if (opt && opt.sessionStorage) {
+        if (SEA.window) {
+          try {
             var sS = {};
             sS = SEA.window.sessionStorage; // TODO: FIX BUG putting on `.is`!
-            if(sS){
+            if (sS) {
               (root._).opt.remember = true;
-              ((gun.back('user')._).opt||opt).remember = true;
-              if(sS.recall || sS.pair) root.user().auth(JSON.parse(sS.pair), cb); // pair is more reliable than alias/pass
+              ((gun.back('user')._).opt || opt).remember = true;
+              if (sS.recall || sS.pair) root.user().auth(JSON.parse(sS.pair), cb); // pair is more reliable than alias/pass
             }
-          }catch(e){}
+          } catch (e) { }
         }
         return gun;
       }

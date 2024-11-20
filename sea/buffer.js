@@ -15,7 +15,7 @@
     Object.assign(SafeBuffer, {
       // (data, enc) where typeof data === 'string' then enc === 'utf8'|'hex'|'base64'
       from() {
-        if (!Object.keys(arguments).length || arguments[0]==null) {
+        if (!Object.keys(arguments).length || arguments[0] == null) {
           throw new TypeError('First argument must be a string, Buffer, ArrayBuffer, Array, or array-like object.')
         }
         const input = arguments[0]
@@ -24,7 +24,7 @@
           const enc = arguments[1] || 'utf8'
           if (enc === 'hex') {
             const bytes = input.match(/([\da-fA-F]{2})/g)
-            .map((byte) => parseInt(byte, 16))
+              .map((byte) => parseInt(byte, 16))
             if (!bytes || !bytes.length) {
               throw new TypeError('Invalid first argument for type \'hex\'.')
             }
@@ -43,7 +43,7 @@
           } else if (enc === 'binary') { // deprecated by above comment
             buf = SeaArray.from(input) // some btoas were mishandled.
           } else {
-            console.info('SafeBuffer.from unknown encoding: '+enc)
+            console.info('SafeBuffer.from unknown encoding: ' + enc)
           }
           return buf
         }
@@ -58,12 +58,12 @@
         }
       },
       // This is 'safe-buffer.alloc' sans encoding support
-      alloc(length, fill = 0 /*, enc*/ ) {
+      alloc(length, fill = 0 /*, enc*/) {
         return SeaArray.from(new Uint8Array(Array.from({ length: length }, () => fill)))
       },
       // This is normal UNSAFE 'buffer.alloc' or 'new Buffer(length)' - don't use!
       allocUnsafe(length) {
-        return SeaArray.from(new Uint8Array(Array.from({ length : length })))
+        return SeaArray.from(new Uint8Array(Array.from({ length: length })))
       },
       // This puts together array of array like members
       concat(arr) { // octet array
