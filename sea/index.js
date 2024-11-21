@@ -85,20 +85,36 @@
       eve.to.next(msg); // not handled
     }
 
+    function hexToBase64(data) {
+      var result = "";
+      for (var i = 0; i < data.length; i++) {
+        result += !(i - 1 & 1) ? String.fromCharCode(parseInt(data.substring(i - 1, i + 1), 16)) : ""
+      }
+      return btoa(result);
+    }
+
+    function base64ToHex(data) {
+      // Decode the base64 string into a binary string
+      var binaryStr = atob(data);
+    
+      // Convert each character in the binary string to its hex equivalent
+      var result = "";
+      for (var i = 0; i < binaryStr.length; i++) {
+        var hex = binaryStr.charCodeAt(i).toString(16);
+        // Ensure each hex is two characters (e.g., '0f' instead of 'f')
+        result += hex.length === 1 ? "0" + hex : hex;
+      }
+      return result;
+    }
+
     // Verify content-addressed data matches its hash
     check.hash = function (eve, msg, val, key, soul, at, no) { // mark unbuilt @i001962 's epic hex contrib!
-      SEA.work(val, null, function (data) {
-        function hexToBase64(hexStr) {
-          var base64 = "";
-          for (var i = 0; i < hexStr.length; i++) {
-            base64 += !(i - 1 & 1) ? String.fromCharCode(parseInt(hexStr.substring(i - 1, i + 1), 16)) : ""
-          }
-          return btoa(base64);
-        }
-        var hash = key.split('#').slice(-1)[0]
-        var slice = hash.slice(-20)
-        if (data && ((data === hash) || (data === hexToBase64(hash)) || (data === slice || (data === hexToBase64(slice))))) { return eve.to.next(msg) }
-        // Get the last 20 characters of the hash
+      var hash = key.split('#').slice(-1)[0]
+      SEA.work(val, null, function (b64hash) {
+        var b64slice = b64hash.slice(-20)
+        var hexhash = base64ToHex(b64hash)
+        var hexslice = hexhash.slice(-20)
+        if (hash && ((hash === b64hash) || (hash === b64slice) || (hash === hexhash) || (hash === hexslice))) { return eve.to.next(msg) }
         no("Data hash not same as hash!");
       }, { name: 'SHA-256' });
     }
