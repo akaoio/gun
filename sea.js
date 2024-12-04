@@ -746,10 +746,7 @@
 
   ;USE(function(module){
     var SEA = USE('./root');
-    // This is to certify that a group of "certificants" can "put" anything at a group of matched "paths" to the certificate authority's graph
-    SEA.certify = SEA.certify || (async (certificants, policy = {}, authority, cb, opt = {}) => {
-      try {
-        /*
+    /*
         The Certify Protocol was made out of love by a Vietnamese code enthusiast. Vietnamese people around the world deserve respect!
         IMPORTANT: A Certificate is like a Signature. No one knows who (authority) created/signed a cert until you put it into their graph.
         "certificants": '*' or a String (Bob.pub) || an Object that contains "pub" as a key || an array of [object || string]. These people will have the rights.
@@ -757,65 +754,54 @@
         "authority": Key pair or priv of the certificate authority.
         "cb": A callback function after all things are done.
         "opt": If opt.expiry (a timestamp) is set, SEA won't sync data after opt.expiry. If opt.block is set, SEA will look for block before syncing.
-        */
+    */
+    SEA.certify = SEA.certify || (async (certs, policy = {}, auth, cb, opt = {}) => {
+      try {
         console.log('SEA.certify() is an early experimental community supported method that may change API behavior without warning in any future version.')
-
-        certificants = (() => {
-          var data = []
-          if (certificants) {
-            if ((typeof certificants === 'string' || Array.isArray(certificants)) && certificants.indexOf('*') > -1) return '*'
-            if (typeof certificants === 'string') return certificants
-            if (Array.isArray(certificants)) {
-              if (certificants.length === 1 && certificants[0]) return typeof certificants[0] === 'object' && certificants[0].pub ? certificants[0].pub : typeof certificants[0] === 'string' ? certificants[0] : null
-              certificants.map(certificant => {
-                if (typeof certificant === 'string') data.push(certificant)
-                else if (typeof certificant === 'object' && certificant.pub) data.push(certificant.pub)
-              })
-            }
-
-            if (typeof certificants === 'object' && certificants.pub) return certificants.pub
-            return data.length > 0 ? data : null
+        var proc = c => {
+          if (!c) return null;
+          if (typeof c === 'string' || (Array.isArray(c) && c.includes('*'))) return '*';
+          if (typeof c === 'string') return c;
+          if (typeof c === 'object' && c.pub) return c.pub;
+          if (Array.isArray(c)) {
+            if (c.length === 1) return c[0] && (typeof c[0] === 'object' ? c[0].pub : typeof c[0] === 'string' ? c[0] : null);
+            return c.reduce((a, c) => { typeof c === 'string' ? a.push(c) : c?.pub && a.push(c.pub); return a; }, []);
           }
-          return
-        })()
+          return null;
+        };
 
-        if (!certificants) return console.log("No certificant found.")
+        var pcerts = proc(certs);
+        if (!pcerts) { console.log("No certificant found."); return; }
 
-        var expiry = opt.expiry && (typeof opt.expiry === 'number' || typeof opt.expiry === 'string') ? parseFloat(opt.expiry) : null
-        var readPolicy = (policy || {}).read ? policy.read : null
-        var writePolicy = (policy || {}).write ? policy.write : typeof policy === 'string' || Array.isArray(policy) || policy["+"] || policy["#"] || policy["."] || policy["="] || policy["*"] || policy[">"] || policy["<"] ? policy : null
-        // The "blacklist" feature is now renamed to "block". Why ? BECAUSE BLACK LIVES MATTER!
-        // We can now use 3 keys: block, blacklist, ban
-        var block = (opt || {}).block || (opt || {}).blacklist || (opt || {}).ban || {}
-        var readBlock = block.read && (typeof block.read === 'string' || (block.read || {})['#']) ? block.read : null
-        var writeBlock = typeof block === 'string' ? block : block.write && (typeof block.write === 'string' || block.write['#']) ? block.write : null
+        var exp = opt.expiry ? parseFloat(opt.expiry) : null;
+        var rpol = policy?.read;
+        var wpol = policy?.write || (typeof policy === 'string' || Array.isArray(policy) || policy["+"] || policy["#"] || policy["."] || policy["="] || policy["*"] || policy[">"] || policy["<"]) ? policy : null;
+        if (!rpol && !wpol) { console.log("No policy found."); return; }
 
-        if (!readPolicy && !writePolicy) return console.log("No policy found.")
+        var blk = opt.block || opt.blacklist || opt.ban || {};
+        var rblk = blk.read && (typeof blk.read === 'string' || (blk.read || {})['#']) ? blk.read : null;
+        var wblk = typeof blk === 'string' ? blk : (blk.write && (typeof blk.write === 'string' || blk.write['#']) ? blk.write : null);
 
-        // reserved keys: c, e, r, w, rb, wb
-        var data = JSON.stringify({
-          c: certificants,
-          ...(expiry ? { e: expiry } : {}), // inject expiry if possible
-          ...(readPolicy ? { r: readPolicy } : {}), // "r" stands for read, which means read permission.
-          ...(writePolicy ? { w: writePolicy } : {}), // "w" stands for write, which means write permission.
-          ...(readBlock ? { rb: readBlock } : {}), // inject READ block if possible
-          ...(writeBlock ? { wb: writeBlock } : {}), // inject WRITE block if possible
-        })
+        var data = {
+          c: pcerts,
+          ...(exp && { e: exp }),
+          ...(rpol && { r: rpol }),
+          ...(wpol && { w: wpol }),
+          ...(rblk && { rb: rblk }),
+          ...(wblk && { wb: wblk })
+        };
 
-        var certificate = await SEA.sign(data, authority, null, { raw: 1 })
-
-        var r = certificate
-        if (!opt.raw) { r = 'SEA' + JSON.stringify(r) }
-        if (cb) { try { cb(r) } catch (e) { console.log(e) } }
-        return r;
+        var cert = await SEA.sign(JSON.stringify(data), auth, null, { raw: 1 });
+        var res = opt.raw ? cert : 'SEA' + JSON.stringify(cert);
+        if (cb) { try { cb(res); } catch (e) { console.error('CB err:', e); } }
+        return res;
       } catch (e) {
         SEA.err = e;
-        if (SEA.throw) { throw e }
-        if (cb) { cb() }
+        if (SEA.throw) throw e;
+        if (cb) cb();
         return;
       }
     });
-
     module.exports = SEA.certify;
   })(USE, './certify');
 
@@ -1521,7 +1507,7 @@
     function base64ToHex(data) {
       // Decode the base64 string into a binary string
       var binaryStr = atob(data);
-    
+
       // Convert each character in the binary string to its hex equivalent
       var result = "";
       for (var i = 0; i < binaryStr.length; i++) {
