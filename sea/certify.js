@@ -12,7 +12,6 @@
     */
     SEA.certify = SEA.certify || (async (certs, policy = {}, auth, cb, opt = {}) => {
       try {
-        console.log('SEA.certify() is an early experimental community supported method that may change API behavior without warning in any future version.')
         var proc = c => {
           if (!c) return null;
           if (typeof c === 'string' || (Array.isArray(c) && c.includes('*'))) return '*';
@@ -25,8 +24,8 @@
           return null;
         };
 
-        var pcerts = proc(certs);
-        if (!pcerts) { console.log("No certificant found."); return; }
+        var c = proc(certs);
+        if (!c) { console.log("No certificant found."); return; }
 
         var exp = opt.expiry ? parseFloat(opt.expiry) : null;
         var rpol = policy?.read;
@@ -38,7 +37,7 @@
         var wblk = typeof blk === 'string' ? blk : (blk.write && (typeof blk.write === 'string' || blk.write['#']) ? blk.write : null);
 
         var data = {
-          c: pcerts,
+          c,
           ...(exp && { e: exp }),
           ...(rpol && { r: rpol }),
           ...(wpol && { w: wpol }),
@@ -47,9 +46,9 @@
         };
 
         var cert = await SEA.sign(JSON.stringify(data), auth, null, { raw: 1 });
-        var res = opt.raw ? cert : 'SEA' + JSON.stringify(cert);
-        if (cb) { try { cb(res); } catch (e) { console.error('CB err:', e); } }
-        return res;
+        var r = opt.raw ? cert : 'SEA' + JSON.stringify(cert);
+        if (cb) { try { cb(r); } catch (e) { console.log(e); } }
+        return r;
       } catch (e) {
         SEA.err = e;
         if (SEA.throw) throw e;

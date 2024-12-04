@@ -31,80 +31,77 @@
 
     // Main security check function - verifies data integrity and authenticity
     function check(msg) { // REVISE / IMPROVE, NO NEED TO PASS MSG/EVE EACH SUB?
-      var eve = this, at = eve.as, put = msg.put, soul = put['#'], key = put['.'], val = put[':'], state = put['>'], id = msg['#'], tmp;
-      if (!soul || !key) { return }
-
-      // Handle faith-based (trusted) puts - these bypass normal verification
-      if ((msg._ || '').faith && (at.opt || '').faith && 'function' == typeof msg._) {
+      var eve = this,
+          at = eve.as,
+          put = msg.put,
+          soul = put['#'],
+          key = put['.'],
+          val = put[':'],
+          state = put['>'],
+          id = msg['#'],
+          tmp;
+    
+      if (!soul || !key) { return; }
+    
+      // Faith-based puts bypass normal verification
+      if ((msg._ || '').faith && (at.opt || '').faith && typeof msg._ === 'function') {
         SEA.opt.pack(put, function (raw) {
-          SEA.verify(raw, false, function (data) { // this is synchronous if false
+          SEA.verify(raw, false, function (data) { // synchronous if false
             put['='] = SEA.opt.unpack(data);
             eve.to.next(msg);
-          })
-        })
-        return
+          });
+        });
+        return;
       }
-
+    
       // Error handler for security violations
-      var no = function (why) { at.on('in', { '@': id, err: msg.err = why }) }; // exploit internal relay stun for now, maybe violates spec, but testing for now. // Note: this may be only the sharded message, not original batch.
-      //var no = function(why){ msg.ack(why) };
-      (msg._ || '').DBG && ((msg._ || '').DBG.c = +new Date);
-
-      // Handle data expiration/forgetting
-      if (0 <= soul.indexOf('<?')) { // special case for "do not sync data X old" forget
-        // 'a~pub.key/b<?9'
-        tmp = parseFloat(soul.split('<?')[1] || '');
-        if (tmp && (state < (Gun.state() - (tmp * 1000)))) { // sec to ms
-          (tmp = msg._) && (tmp.stun) && (tmp.stun--); // THIS IS BAD CODE! It assumes GUN internals do something that will probably change in future, but hacking in now.
-          return; // omit!
+      var no = function (why) {
+        at.on('in', { '@': id, err: msg.err = why });
+      };
+    
+      // Data expiration handling
+      if (soul.indexOf('<?') >= 0) { // Handle expiration
+        var expStr = soul.split('<?')[1];
+        var expiration = parseFloat(expStr);
+        if (expiration && state < (Gun.state() - (expiration * 1000))) { // sec to ms
+          if (msg._ && msg._.stun) {
+            msg._.stun--;
+          }
+          return; // Omit expired data
         }
       }
-
-      // Handle system data - alias list verification
-      if ('~@' === soul) {  // special case for shared system data, the list of aliases.
-        check.alias(eve, msg, val, key, soul, at, no); return;
+    
+      // Handler mappings based on soul patterns
+      if (soul === '~@') { // Shared system data aliases
+        check.alias(eve, msg, val, key, soul, at, no);
+      } else if (soul.slice(0, 2) === '~@') { // Public key lists
+        check.pubs(eve, msg, val, key, soul, at, no);
+      } else if (SEA.opt.pub(soul)) { // User account data
+        var pub = SEA.opt.pub(soul);
+        check.pub(eve, msg, val, key, soul, at, no, at.user || '', pub);
+      } else if (soul.indexOf('#') >= 0) { // Content-addressed data
+        check.hash(eve, msg, val, key, soul, at, no);
+      } else { // Default verification for unsigned data
+        check.any(eve, msg, val, key, soul, at, no, at.user || '');
       }
-
-      // Handle public key list verification
-      if ('~@' === soul.slice(0, 2)) { // special case for shared system data, the list of public keys for an alias.
-        check.pubs(eve, msg, val, key, soul, at, no); return;
-      }
-
-      // Handle user account data verification
-      if (tmp = SEA.opt.pub(soul)) { // special case, account data for a public key.
-        check.pub(eve, msg, val, key, soul, at, no, at.user || '', tmp); return;
-      }
-
-      // Handle content-addressed data verification
-      if (0 <= soul.indexOf('#')) { // special case for content addressing immutable hashed data.
-        check.hash(eve, msg, val, key, soul, at, no); return;
-      }
-
-      // Default verification for unsigned data
-      check.any(eve, msg, val, key, soul, at, no, at.user || ''); return;
-      eve.to.next(msg); // not handled
     }
 
     function hexToBase64(data) {
-      var result = "";
-      for (var i = 0; i < data.length; i++) {
-        result += !(i - 1 & 1) ? String.fromCharCode(parseInt(data.substring(i - 1, i + 1), 16)) : ""
-      }
-      return btoa(result);
+      if (data.length & 1) data = "0" + data;
+      var a = [];
+      for (var i = 0; i < data.length; i += 2)
+        a.push(String.fromCharCode(parseInt(data.substr(i, 2), 16)));
+      return btoa(a.join(""));
     }
-
-    function base64ToHex(data) {
-      // Decode the base64 string into a binary string
-      var binaryStr = atob(data);
     
-      // Convert each character in the binary string to its hex equivalent
-      var result = "";
+    function base64ToHex(data) {
+      var binaryStr = atob(data);
+      var a = [];
       for (var i = 0; i < binaryStr.length; i++) {
         var hex = binaryStr.charCodeAt(i).toString(16);
-        // Ensure each hex is two characters (e.g., '0f' instead of 'f')
-        result += hex.length === 1 ? "0" + hex : hex;
+        a.push(hex.length === 1 ? "0" + hex : hex);
       }
-      return result;
+      return a.join("");
     }
 
     // Verify content-addressed data matches its hash
