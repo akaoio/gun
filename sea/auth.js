@@ -9,12 +9,22 @@
     // 3. Using SEA.name for custom authentication
     User.prototype.auth = function (...args) {
       // Parse authentication parameters
-      var pair = typeof args[0] === 'object' && (args[0].pub || args[0].epub) ? args[0] : typeof args[1] === 'object' && (args[1].pub || args[1].epub) ? args[1] : null;
+      var pair = (args[0] && (args[0].pub || args[0].epub)) || (args[1] && (args[1].pub || args[1].epub)) ? args[0] || args[1] : null;
       var alias = !pair && typeof args[0] === 'string' ? args[0] : null;
       var pass = (alias || (pair && !(pair.priv && pair.epriv))) && typeof args[1] === 'string' ? args[1] : null;
-      var cb = args.filter(arg => typeof arg === 'function')[0] || null; // Callback can be anywhere in args
-      var opt = args && args.length > 1 && typeof args[args.length - 1] === 'object' ? args[args.length - 1] : {}; // Options always last object
-      var retries = typeof opt.retries === 'number' ? opt.retries : 9;
+      var cb = null;
+      var opt = {};
+      var retries = 9;
+
+      // Iterate through arguments just once to extract the necessary values
+      for (var i = 0; i < args.length; i++) {
+          if (typeof args[i] === 'function' && !cb) {
+              cb = args[i];
+          } else if (i === args.length - 1 && typeof args[i] === 'object') {
+              opt = args[i];
+              retries = opt.retries || retries;
+          }
+      }
 
       var gun = this, cat = (gun._), root = gun.back(-1);
 

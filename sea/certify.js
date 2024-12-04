@@ -19,7 +19,7 @@
           if (typeof c === 'object' && c.pub) return c.pub;
           if (Array.isArray(c)) {
             if (c.length === 1) return c[0] && (typeof c[0] === 'object' ? c[0].pub : typeof c[0] === 'string' ? c[0] : null);
-            return c.reduce((a, c) => { typeof c === 'string' ? a.push(c) : c?.pub && a.push(c.pub); return a; }, []);
+            return c.reduce((a, c) => { typeof c === 'string' ? a.push(c) : (c || {}).pub && a.push(c.pub); return a; }, []);
           }
           return null;
         };
@@ -28,8 +28,8 @@
         if (!c) { console.log("No certificant found."); return; }
 
         var exp = opt.expiry ? parseFloat(opt.expiry) : null;
-        var rpol = policy?.read;
-        var wpol = policy?.write || (typeof policy === 'string' || Array.isArray(policy) || policy["+"] || policy["#"] || policy["."] || policy["="] || policy["*"] || policy[">"] || policy["<"]) ? policy : null;
+        var rpol = (policy || {}).read;
+        var wpol = (policy || {}).write || (typeof policy === 'string' || Array.isArray(policy) || policy["+"] || policy["#"] || policy["."] || policy["="] || policy["*"] || policy[">"] || policy["<"]) ? policy : null;
         if (!rpol && !wpol) { console.log("No policy found."); return; }
 
         var blk = opt.block || opt.blacklist || opt.ban || {};

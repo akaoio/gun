@@ -5,24 +5,26 @@
     function SeaArray() { }
     Object.assign(SeaArray, { from: Array.from })
     SeaArray.prototype = Object.create(Array.prototype)
-    SeaArray.prototype.toString = function (enc, start, end) {
-      enc = enc || 'utf8'; start = start || 0;
-      var length = this.length
-      if (enc === 'hex') {
-        var buf = new Uint8Array(this)
-        return [...Array(((end && (end + 1)) || length) - start).keys()]
-          .map((i) => buf[i + start].toString(16).padStart(2, '0')).join('')
+    SeaArray.prototype.toString = function (enc = 'utf8', start = 0, end = this.length) {
+      var length = this.length;
+      var slice = this.slice(start, end);
+
+      switch (enc) {
+        case 'hex':
+          return Array.from(slice)
+            .map(byte => byte.toString(16).padStart(2, '0'))
+            .join('');
+
+        case 'utf8':
+          return String.fromCharCode(...slice);
+
+        case 'base64':
+          return btoa(String.fromCharCode(...slice));
+
+        default:
+          throw new Error('Unsupported encoding: ' + enc);
       }
-      if (enc === 'utf8') {
-        return Array.from(
-          { length: (end || length) - start },
-          (_, i) => String.fromCharCode(this[i + start])
-        ).join('')
-      }
-      if (enc === 'base64') {
-        return btoa(this)
-      }
-    }
+    };    
     module.exports = SeaArray;
   
 }());

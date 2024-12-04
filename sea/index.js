@@ -31,46 +31,35 @@
 
     // Main security check function - verifies data integrity and authenticity
     function check(msg) { // REVISE / IMPROVE, NO NEED TO PASS MSG/EVE EACH SUB?
-      var eve = this,
-          at = eve.as,
-          put = msg.put,
-          soul = put['#'],
-          key = put['.'],
-          val = put[':'],
-          state = put['>'],
-          id = msg['#'],
-          tmp;
-    
+      var eve = this, at = eve.as, put = msg.put, soul = put['#'], key = put['.'], val = put[':'], state = put['>'], id = msg['#'], tmp;
+
       if (!soul || !key) { return; }
-    
+
       // Faith-based puts bypass normal verification
       if ((msg._ || '').faith && (at.opt || '').faith && typeof msg._ === 'function') {
-        SEA.opt.pack(put, function (raw) {
-          SEA.verify(raw, false, function (data) { // synchronous if false
+        SEA.opt.pack(put, raw => {
+          SEA.verify(raw, false, data => {
             put['='] = SEA.opt.unpack(data);
             eve.to.next(msg);
           });
         });
         return;
-      }
-    
+      }      
+
       // Error handler for security violations
       var no = function (why) {
         at.on('in', { '@': id, err: msg.err = why });
       };
-    
+
       // Data expiration handling
-      if (soul.indexOf('<?') >= 0) { // Handle expiration
-        var expStr = soul.split('<?')[1];
-        var expiration = parseFloat(expStr);
-        if (expiration && state < (Gun.state() - (expiration * 1000))) { // sec to ms
-          if (msg._ && msg._.stun) {
-            msg._.stun--;
-          }
+      if (soul.includes('<?')) { // Handle expiration
+        var expiration = parseFloat(soul.split('<?')[1]);
+        if (expiration && state < (Gun.state() - expiration * 1000)) {
+          if ((msg._ || {}).stun) msg._.stun--;
           return; // Omit expired data
         }
-      }
-    
+      }      
+
       // Handler mappings based on soul patterns
       if (soul === '~@') { // Shared system data aliases
         check.alias(eve, msg, val, key, soul, at, no);
@@ -93,7 +82,7 @@
         a.push(String.fromCharCode(parseInt(data.substr(i, 2), 16)));
       return btoa(a.join(""));
     }
-    
+
     function base64ToHex(data) {
       var binaryStr = atob(data);
       var a = [];
@@ -105,16 +94,14 @@
     }
 
     // Verify content-addressed data matches its hash
-    check.hash = function (eve, msg, val, key, soul, at, no) { // mark unbuilt @i001962 's epic hex contrib!
-      var hash = key.split('#').slice(-1)[0]
-      SEA.work(val, null, function (b64hash) {
-        var b64slice = b64hash.slice(-20)
-        var hexhash = base64ToHex(b64hash)
-        var hexslice = hexhash.slice(-20)
-        if (hash && ((hash === b64hash) || (hash === b64slice) || (hash === hexhash) || (hash === hexslice))) { return eve.to.next(msg) }
+    check.hash = function (eve, msg, val, key, soul, at, no) {
+      var hash = key.split('#').pop();
+      SEA.work(val, null, (b64hash) => {
+        var hexhash = base64ToHex(b64hash), b64slice = b64hash.slice(-20), hexslice = hexhash.slice(-20);
+        if ([b64hash, b64slice, hexhash, hexslice].includes(hash)) return eve.to.next(msg);
         no("Data hash not same as hash!");
       }, { name: 'SHA-256' });
-    }
+    }    
 
     // Verify alias data matches its reference
     check.alias = function (eve, msg, val, key, soul, at, no) { // Example: {_:#~@, ~@alice: {#~@alice}}
@@ -140,16 +127,16 @@
         if (certificate.m && certificate.s && certificant && pub)
           // Verify certificate authenticity and permissions
           return SEA.verify(certificate, pub, data => { // check if "pub" (of the graph owner) really issued this cert
-            if (u !== data && u !== data.e && msg.put['>'] && msg.put['>'] > parseFloat(data.e)) return no("Certificate expired.") // certificate expired
+            if (u !== data && u !== data.e && msg.put['>'] > +data.e) return no("Certificate expired.") // certificate expired
             // "data.c" = a list of certificants/certified users
             // "data.w" = lex WRITE permission, in the future, there will be "data.r" which means lex READ permission
-            if (u !== data && data.c && data.w && (data.c === certificant || data.c.indexOf('*') > -1 || data.c.indexOf(certificant) > -1)) {
+            if (u !== data && data.c && data.w && (data.c.includes(certificant) || data.c.includes('*'))) {
               // ok, now "certificant" is in the "certificants" list, but is "path" allowed? Check path
-              var path = soul.indexOf('/') > -1 ? soul.replace(soul.substring(0, soul.indexOf('/') + 1), '') : ''
-              String.match = String.match || Gun.text.match
-              var w = Array.isArray(data.w) ? data.w : typeof data.w === 'object' || typeof data.w === 'string' ? [data.w] : []
+              var path = soul.split('/').slice(1).join('/');
+              String.match = String.match || Gun.text.match;
+              var w = [].concat(data.w).filter(Boolean);
               for (var lex of w) {
-                if ((String.match(path, lex['#']) && String.match(key, lex['.'])) || (!lex['.'] && String.match(path, lex['#'])) || (!lex['#'] && String.match(key, lex['.'])) || String.match((path ? path + '/' + key : key), lex['#'] || lex)) {
+                if (String.match(path, lex['#']) && (String.match(key, lex['.']) || !lex['.']) || String.match(key, lex['.']) && !lex['#'] || String.match((path ? path + '/' + key : key), lex['#'] || lex)) {
                   // is Certificant forced to present in Path
                   if (lex['+'] && lex['+'].indexOf('*') > -1 && path && path.indexOf(certificant) == -1 && key.indexOf(certificant) == -1) return no(`Path "${path}" or key "${key}" must contain string "${certificant}".`)
                   // path is allowed, but is there any WRITE block? Check it out
@@ -177,80 +164,64 @@
       }
 
       // Handle authenticated user writes
-      if ((tmp = user.is) && tmp.pub && !raw['*'] && !raw['+'] && (pub === tmp.pub || (pub !== tmp.pub && ((msg._.msg || {}).opt || {}).cert))) {
+      if ((tmp = user.is) && tmp.pub && !raw['*'] && !raw['+'] && (pub === tmp.pub || (pub !== tmp.pub && (((msg._ || {}).msg || {}).opt || {}).cert))) {
         SEA.opt.pack(msg.put, packed => {
-          SEA.sign(packed, (user._).sea, async function (data) {
-            if (u === data) return no(SEA.err || 'Signature fail.')
-            msg.put[':'] = { ':': tmp = SEA.opt.unpack(data.m), '~': data.s }
-            msg.put['='] = tmp
+          SEA.sign(packed, user._.sea, async data => {
+            if (u === data) return no(SEA.err || 'Signature fail.');
 
-            // if writing to own graph, just allow it
+            msg.put[':'] = { ':': tmp = SEA.opt.unpack(data.m), '~': data.s };
+            msg.put['='] = tmp;
+
+            // If writing to own graph
             if (pub === user.is.pub) {
-              if (tmp = link_is(val)) (at.sea.own[tmp] = at.sea.own[tmp] || {})[pub] = 1
-              JSON.stringifyAsync(msg.put[':'], function (err, s) {
-                if (err) { return no(err || "Stringify error.") }
-                msg.put[':'] = s;
-                return eve.to.next(msg);
-              })
-              return
+              if (tmp = link_is(val)) at.sea.own[tmp] = at.sea.own[tmp] || {};
+              return JSON.stringifyAsync(msg.put[':'], (err, s) => err ? no(err || "Stringify error.") : (msg.put[':'] = s, eve.to.next(msg)));
             }
 
-            // if writing to other's graph, check if cert exists then try to inject cert into put
-            if (pub !== user.is.pub && ((msg._.msg || {}).opt || {}).cert) {
-              var cert = await S.parse(msg._.msg.opt.cert)
-              // even if cert exists, we must verify it
-              if (cert && cert.m && cert.s)
-                verify(cert, user.is.pub, _ => {
-                  msg.put[':']['+'] = cert // '+' is a certificate
-                  msg.put[':']['*'] = user.is.pub // '*' is pub of the user who puts
-                  JSON.stringifyAsync(msg.put[':'], function (err, s) {
-                    if (err) { return no(err || "Stringify error.") }
-                    msg.put[':'] = s;
-                    return eve.to.next(msg);
-                  })
-                  return
-                })
+            // If writing to other's graph, check cert and inject
+            if (pub !== user.is.pub && (((msg._ || {}).msg || {}).opt || {}).cert) {
+              var cert = await S.parse(msg._.msg.opt.cert);
+              if ((cert || {}).m && (cert || {}).s) {
+                verify(cert, user.is.pub, () => {
+                  msg.put[':']['+'] = cert;
+                  msg.put[':']['*'] = user.is.pub;
+                  return JSON.stringifyAsync(msg.put[':'], (err, s) => err ? no(err || "Stringify error.") : (msg.put[':'] = s, eve.to.next(msg)));
+                });
+              }
             }
-          }, { raw: 1 })
-        })
+          }, { raw: 1 });
+        });
         return;
       }
 
       // Handle signed but unauthenticated writes
-      if ((tmp == user.is) && !tmp && !raw['*'] && raw['m'] && raw['s']) {
+      if (tmp == user.is && !tmp && !raw['*'] && raw['m'] && raw['s']) {
         SEA.opt.pack(msg.put, packed => {
-          SEA.verify(packed, pub, async function (data) {
-            if (u === data) return no("Unverified data.")
-            if (data == raw['m']) {
-              msg.put[':'] = JSON.stringify({ ':': raw['m'], '~': raw['s'] })
-              msg.put['='] = data;
-              return eve.to.next(msg);
-            }
+          SEA.verify(packed, pub, data => {
+            if (u === data || data !== raw['m']) return;
+            msg.put[':'] = JSON.stringify({ ':': raw['m'], '~': raw['s'] });
+            msg.put['='] = data;
+            return eve.to.next(msg);
           });
         });
-      }
+      }      
 
       // Handle general data verification
       SEA.opt.pack(msg.put, packed => {
-        SEA.verify(packed, raw['*'] || pub, function (data) {
-          var tmp;
+        SEA.verify(packed, raw['*'] || pub, data => {
           data = SEA.opt.unpack(data);
-          if (u === data) return no("Unverified data.") // make sure the signature matches the account it claims to be on. // reject any updates that are signed with a mismatched account.
-          if ((tmp = link_is(data)) && pub === SEA.opt.pub(tmp)) (at.sea.own[tmp] = at.sea.own[tmp] || {})[pub] = 1
+          if (u === data) return no("Unverified data.");
+          if (link_is(data) && pub === SEA.opt.pub(link_is(data))) at.sea.own[link_is(data)] = { [pub]: 1 };
 
-          // check if cert ('+') and putter's pub ('*') exist
-          if (raw['+'] && raw['+']['m'] && raw['+']['s'] && raw['*'])
-            // now verify certificate
-            verify(raw['+'], raw['*'], _ => {
-              msg.put['='] = data;
-              return eve.to.next(msg);
-            })
-          else {
+          var cert = raw['+'];
+          if (cert && cert['m'] && cert['s'] && raw['*']) {
+            verify(cert, raw['*'], () => { msg.put['='] = data; return eve.to.next(msg); });
+          } else {
             msg.put['='] = data;
             return eve.to.next(msg);
           }
         });
-      })
+      });      
       return
     };
 
@@ -302,22 +273,18 @@
 
     // Data unpacking helper
     var O = SEA.opt;
-    SEA.opt.unpack = function (d, k, n) {
-      var tmp;
-      if (u === d) { return }
-      if (d && (u !== (tmp = d[':']))) { return tmp }
-      k = k || O.fall_key; if (!n && O.fall_val) { n = {}; n[k] = O.fall_val }
-      if (!k || !n) { return }
-      if (d === n[k]) { return d }
-      if (!SEA.opt.check(n[k])) { return d }
-      var soul = (n && n._ && n._['#']) || O.fall_soul, s = Gun.state.is(n, k) || O.fall_state;
-      if (d && 4 === d.length && soul === d[0] && k === d[1] && fl(s) === fl(d[3])) {
-        return d[2];
-      }
-      if (s < SEA.opt.shuffle_attack) {
-        return d;
-      }
-    }
+    SEA.opt.unpack = function(d, k, n) {
+      if (u === d || (d && u !== d[':'])) return d && d[':'];
+      k = k || O.fall_key;
+      n = n || (O.fall_val ? { [k]: O.fall_val } : {});
+      if (!k || !n) return;
+      if (d === n[k]) return d;
+      if (!SEA.opt.check(n[k])) return d;
+      var soul = (n._ && n._['#']) || O.fall_soul,
+          s = Gun.state.is(n, k) || O.fall_state;
+      if (Array.isArray(d) && d.length === 4 && d[0] === soul && d[1] === k && fl(s) === fl(d[3])) return d[2];
+      if (s < SEA.opt.shuffle_attack) return d;
+    };
 
     // Security constants
     SEA.opt.shuffle_attack = 1546329600000; // Jan 1, 2019
