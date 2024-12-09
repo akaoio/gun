@@ -1,10 +1,10 @@
 ;(function(){
 
     var shim = require('./shim');
-    module.exports = async function (d, o) {
-      var t = (typeof d == 'string') ? d : await shim.stringify(d);
-      var hash = await shim.subtle.digest({ name: o || 'SHA-256' }, new shim.TextEncoder().encode(t));
-      return shim.Buffer.from(hash);
+    module.exports = function (d, o) {
+      return ((typeof d == 'string') ? Promise.resolve(d) : shim.stringify(d))
+        .then(function(t){ return shim.subtle.digest({ name: o || 'SHA-256' }, new shim.TextEncoder().encode(t)) })
+        .then(function(hash){ return shim.Buffer.from(hash) });
     }
   
 }());

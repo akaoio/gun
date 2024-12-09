@@ -247,14 +247,7 @@
     };
 
     s.check = function (t) { return (typeof t == 'string') && ('SEA{' === t.slice(0, 4)) }
-    s.parse = async function p(t) {
-      try {
-        var yes = (typeof t == 'string');
-        if (yes && 'SEA{' === t.slice(0, 4)) { t = t.slice(3) }
-        return yes ? await shim.parse(t) : t;
-      } catch (e) { }
-      return t;
-    }
+    s.parse = t => Promise.resolve(typeof t == 'string' ? shim.parse('SEA{' === t.slice(0, 4) ? t.slice(3) : t) : t).catch(() => t);
 
     SEA.opt = s;
     module.exports = s
@@ -262,10 +255,10 @@
 
   ;USE(function(module){
     var shim = USE('./shim');
-    module.exports = async function (d, o) {
-      var t = (typeof d == 'string') ? d : await shim.stringify(d);
-      var hash = await shim.subtle.digest({ name: o || 'SHA-256' }, new shim.TextEncoder().encode(t));
-      return shim.Buffer.from(hash);
+    module.exports = function (d, o) {
+      return ((typeof d == 'string') ? Promise.resolve(d) : shim.stringify(d))
+        .then(function(t){ return shim.subtle.digest({ name: o || 'SHA-256' }, new shim.TextEncoder().encode(t)) })
+        .then(function(hash){ return shim.Buffer.from(hash) });
     }
   })(USE, './sha256');
 
@@ -285,115 +278,59 @@
     var sha = USE('./sha256');
     var u;
 
-    SEA.work = SEA.work || async function(data, pair, cb, opt) {
-      try {
-        var salt = (pair || {}).epub || pair;
-        opt = opt || {};
-        if (salt instanceof Function) {
-          cb = salt;
-          salt = undefined;
-        }
-        data = (typeof data === 'string') ? data : await shim.stringify(data);
-
-        if ('sha' === (opt.name || '').slice(0, 3).toLowerCase()) {
-          var rsha = shim.Buffer.from(await sha(data, opt.name), 'binary').toString(opt.encode || 'base64');
-          if (cb) try { cb(rsha) } catch (e) { console.log(e); }
-          return rsha;
-        }
-
-        salt = salt || shim.random(9);
-        var key = await (shim.ossl || shim.subtle).importKey('raw', new shim.TextEncoder().encode(data), { name: opt.name || 'PBKDF2' }, false, ['deriveBits']);
-        var work = await (shim.ossl || shim.subtle).deriveBits({
-          name: opt.name || 'PBKDF2',
-          iterations: opt.iterations || S.pbkdf2.iter,
-          salt: new shim.TextEncoder().encode(opt.salt || salt),
-          hash: opt.hash || S.pbkdf2.hash,
-        }, key, opt.length || (S.pbkdf2.ks * 8));
-
-        data = shim.random(data.length); // Clear data in case of passphrase
-        var r = shim.Buffer.from(work, 'binary').toString(opt.encode || 'base64');
-
-        if (cb) try { cb(r) } catch (e) { console.log(e); }
-        return r;
-      } catch (e) {
-        console.log(e);
-        SEA.err = e;
-        if (SEA.throw) throw e;
-        if (cb) cb();
-      }
-    };    
+    SEA.work = SEA.work || function(data, pair, cb, opt){
+      var salt = (pair||{}).epub||pair; opt = opt||{};
+      if(salt instanceof Function){cb = salt; salt = u}
+      return ((typeof data === 'string')? Promise.resolve(data) : shim.stringify(data))
+      .then(function(d){return ('sha' === (opt.name||'').slice(0,3).toLowerCase())?
+        sha(d, opt.name).then(function(hash){var r = shim.Buffer.from(hash,'binary').toString(opt.encode||'base64'); if(cb)cb(r); return r}) :
+        (salt = salt||shim.random(9), (shim.ossl||shim.subtle).importKey('raw', new shim.TextEncoder().encode(d),
+        {name:opt.name||'PBKDF2'}, false, ['deriveBits'])
+        .then(function(key){return (shim.ossl||shim.subtle).deriveBits({name:opt.name||'PBKDF2',iterations:opt.iterations||S.pbkdf2.iter,
+        salt:new shim.TextEncoder().encode(opt.salt||salt),hash:opt.hash||S.pbkdf2.hash},key,opt.length||(S.pbkdf2.ks*8))})
+        .then(function(work){d=shim.random(d.length); var r=shim.Buffer.from(work,'binary').toString(opt.encode||'base64'); if(cb)cb(r); return r}))})
+      .catch(function(e){console.log(e); SEA.err=e; if(SEA.throw)throw e; if(cb)cb()});
+    };
 
     module.exports = SEA.work;
   })(USE, './work');
 
   ;USE(function(module){
-    var SEA = USE('./root');
-    var shim = USE('./shim');
-    var S = USE('./settings');
-
-    SEA.name = SEA.name || (async (cb, opt) => {
-      try {
-        if (cb) { try { cb() } catch (e) { console.log(e) } }
-        return;
-      } catch (e) {
-        console.log(e);
-        SEA.err = e;
-        if (SEA.throw) { throw e }
-        if (cb) { cb() }
-        return;
-      }
-    });
-
-    SEA.pair = SEA.pair || async function(cb, opt) {
-      try {
-        var ecdhSubtle = shim.ossl || shim.subtle;
-        var r = {};
-
-        if (opt && opt.seed) {
-          var encoder = new shim.TextEncoder();
-          var toBase64Url = buffer =>
-            shim.Buffer.from(buffer).toString('base64')
-              .replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
-
-          var signPriv = toBase64Url(new Uint8Array(await shim.subtle.digest('SHA-256', encoder.encode(opt.seed + '-sign')))).slice(0, 43);
-          var encryptPriv = toBase64Url(new Uint8Array(await shim.subtle.digest('SHA-256', encoder.encode(opt.seed + '-encrypt')))).slice(0, 43);
-          var signPubX = toBase64Url(await shim.subtle.digest('SHA-256', encoder.encode(signPriv + '-x'))).slice(0, 43);
-          var signPubY = toBase64Url(await shim.subtle.digest('SHA-256', encoder.encode(signPriv + '-y'))).slice(0, 43);
-          var encryptPubX = toBase64Url(await shim.subtle.digest('SHA-256', encoder.encode(encryptPriv + '-x'))).slice(0, 43);
-          var encryptPubY = toBase64Url(await shim.subtle.digest('SHA-256', encoder.encode(encryptPriv + '-y'))).slice(0, 43);
-
-          r = { pub: signPubX + '.' + signPubY, priv: signPriv, epub: encryptPubX + '.' + encryptPubY, epriv: encryptPriv };
-        } else {
-          var sa = await shim.subtle.generateKey(
-            { name: 'ECDSA', namedCurve: 'P-256' }, true, ['sign', 'verify']
-          ).then(async (keys) => {
-            var pub = await shim.subtle.exportKey('jwk', keys.publicKey);
-            return { pub: pub.x + '.' + pub.y, priv: (await shim.subtle.exportKey('jwk', keys.privateKey)).d };
+    var SEA = USE('./root'), shim = USE('./shim');
+    SEA.name = function(cb){ return new Promise(function(r){ cb && cb(); r() }).catch(function(e){ console.log(e); cb && cb() }) };
+    SEA.pair = function(cb, opt){
+      return new Promise(function(done){
+        var r = {}, s = shim.subtle;
+        function b64(b){ return shim.Buffer.from(b).toString('base64').replace(/[+/=]/g,function(c){ return ({'+':'-','/':'_','=':''})[c] }) }
+        function fin(r){ cb && cb(r); done(r) }
+        if(opt && opt.seed){
+          var e = new shim.TextEncoder();
+          s.digest('SHA-256',e.encode(opt.seed+'-sign')).then(function(h){
+            r.priv = b64(new Uint8Array(h)).slice(0,43);
+            return Promise.all([s.digest('SHA-256',e.encode(r.priv+'-x')),s.digest('SHA-256',e.encode(r.priv+'-y')),s.digest('SHA-256',e.encode(opt.seed+'-encrypt'))]);
+          }).then(function(a){
+            r.pub = b64(new Uint8Array(a[0])).slice(0,43)+'.'+b64(new Uint8Array(a[1])).slice(0,43);
+            r.epriv = b64(new Uint8Array(a[2])).slice(0,43);
+            return Promise.all([s.digest('SHA-256',e.encode(r.epriv+'-x')),s.digest('SHA-256',e.encode(r.epriv+'-y'))]);
+          }).then(function(a){
+            r.epub = b64(new Uint8Array(a[0])).slice(0,43)+'.'+b64(new Uint8Array(a[1])).slice(0,43);
+            fin(r);
           });
-
-          try {
-            var dh = await ecdhSubtle.generateKey(
-              { name: 'ECDH', namedCurve: 'P-256' }, true, ['deriveKey']
-            ).then(async (keys) => {
-              var pub = await ecdhSubtle.exportKey('jwk', keys.publicKey);
-              return { epub: pub.x + '.' + pub.y, epriv: (await ecdhSubtle.exportKey('jwk', keys.privateKey)).d };
-            });
-            r = { pub: sa.pub, priv: sa.priv, epub: dh.epub, epriv: dh.epriv };
-          } catch (e) {
-            console.log('ECDH not supported or error:', e);
-          }
+          return;
         }
-
-        if (cb) cb(r);
-        return r;
-      } catch (e) {
-        console.log(e);
-        SEA.err = e;
-        if (SEA.throw) throw e;
-        if (cb) cb();
-      }
+        s.generateKey({name:'ECDSA',namedCurve:'P-256'},1,['sign']).then(function(k){
+          return Promise.all([s.exportKey('jwk',k.publicKey),s.exportKey('jwk',k.privateKey)]);
+        }).then(function(a){
+          r.pub = a[0].x+'.'+a[0].y; r.priv = a[1].d;
+          return (shim.ossl||s).generateKey({name:'ECDH',namedCurve:'P-256'},1,['deriveKey']);
+        }).then(function(k){
+          return Promise.all([s.exportKey('jwk',k.publicKey),s.exportKey('jwk',k.privateKey)]);
+        }).then(function(a){
+          r.epub = a[0].x+'.'+a[0].y; r.epriv = a[1].d;
+          fin(r);
+        }).catch(function(e){ console.log(e); fin(r) });
+      }).catch(function(e){ console.log(e); cb && cb() });
     };
-
     module.exports = SEA.pair;
   })(USE, './pair');
 
@@ -404,73 +341,106 @@
     var sha = USE('./sha256');
     var u;
 
-    SEA.sign = SEA.sign || (async (data, pair, cb, opt) => {
-      try {
-        // Ensure options are initialized
-        opt = opt || {};
+    SEA.sign = function(data, pair, cb, opt) {
+      return new Promise(function(resolve) {
+        try {
+          opt = opt || {};
 
-        // Check if the private key is available, if not, retrieve it
-        if (!(pair || opt).priv) {
-          if (!SEA.I) { throw 'No signing key.' }
-          pair = await SEA.I(null, { what: data, how: 'sign', why: opt.why });
-        }
-
-        // Validate the data
-        if (u === data) { throw '`undefined` not allowed.' }
-
-        // Parse the data
-        var json = await S.parse(data);
-
-        // Set the check option, defaulting to the parsed data
-        var check = opt.check = opt.check || json;
-
-        // If the data is already signed, return the signed data
-        if (SEA.verify && (SEA.opt.check(check) || (check && check.s && check.m))
-          && u !== await SEA.verify(check, pair)) {
-          var r = await S.parse(check);
-          if (!opt.raw) { r = 'SEA' + await shim.stringify(r); }
-          if (cb) { 
-            try { 
-              cb(r); 
-            } catch (e) { 
-              console.log(e); 
-            } 
+          if (u === data) { 
+            throw '`undefined` not allowed.';
           }
-          return r;
+
+          function checkPair() {
+            if (!(pair || opt).priv) {
+              if (!SEA.I) { 
+                throw 'No signing key.';
+              }
+              return SEA.I(null, { what: data, how: 'sign', why: opt.why })
+              .then(function(key) {
+                pair = key;
+                return processData();
+              });
+            }
+            return processData();
+          }
+
+          function processData() {
+            return S.parse(data).then(function(json) {
+              var check = opt.check = opt.check || json;
+
+              if (SEA.verify && (SEA.opt.check(check) || (check && check.s && check.m))) {
+                return SEA.verify(check, pair).then(function(ok) {
+                  if (u === ok) {
+                    return sign(json);
+                  }
+                  return S.parse(check).then(function(r) {
+                    if (!opt.raw) {
+                      return shim.stringify(r).then(function(r) {
+                        return finish('SEA' + r);
+                      });
+                    }
+                    return finish(r);
+                  });
+                });
+              }
+              return sign(json);
+            });
+          }
+
+          function sign(json) {
+            return sha(json).then(function(hash) {
+              var jwk = S.jwk(pair.pub, pair.priv);
+              return (shim.ossl || shim.subtle).importKey('jwk', jwk, {
+                name: 'ECDSA',
+                namedCurve: 'P-256'
+              }, false, ['sign'])
+              .then(function(key) {
+                return (shim.ossl || shim.subtle).sign({
+                  name: 'ECDSA',
+                  hash: { name: 'SHA-256' }
+                }, key, new Uint8Array(hash));
+              })
+              .then(function(sig) {
+                var r = {
+                  m: json,
+                  s: shim.Buffer.from(sig, 'binary').toString(opt.encode || 'base64')
+                };
+                if (!opt.raw) {
+                  return shim.stringify(r).then(function(r) {
+                    return finish('SEA' + r);
+                  });
+                }
+                return finish(r);
+              });
+            });
+          }
+
+          function finish(r) {
+            if (cb) {
+              try {
+                cb(r);
+              } catch(e) {
+                console.log(e);
+              }
+            }
+            return resolve(r);
+          }
+
+          checkPair();
+
+        } catch(e) {
+          console.log(e);
+          SEA.err = e;
+          if (SEA.throw) {
+            throw e;
+          }
+          if (cb) {
+            cb();
+          }
+          resolve();
         }
-
-        // Prepare the public and private keys
-        var pub = pair.pub;
-        var priv = pair.priv;
-        var jwk = S.jwk(pub, priv);
-
-        // Hash the data and sign it
-        var hash = await sha(json);
-        var sig = await (shim.ossl || shim.subtle).importKey('jwk', jwk, { name: 'ECDSA', namedCurve: 'P-256' }, false, ['sign'])
-          .then((key) => (shim.ossl || shim.subtle).sign({ name: 'ECDSA', hash: { name: 'SHA-256' } }, key, new Uint8Array(hash)));
-
-        // Create the result object
-        var r = { m: json, s: shim.Buffer.from(sig, 'binary').toString(opt.encode || 'base64') };
-        if (!opt.raw) { r = 'SEA' + await shim.stringify(r); }
-
-        // Execute the callback if provided
-        if (cb) { 
-          try { 
-            cb(r); 
-          } catch (e) { 
-            console.log(e); 
-          } 
-        }
-
-        return r;
-      } catch (e) {
-        console.log(e);
-        SEA.err = e;
-        if (SEA.throw) { throw e; }
-        if (cb) { cb(); }
-        return;
-      }
-    });    
+      });
+    };
 
     module.exports = SEA.sign;
   })(USE, './sign');
@@ -1555,8 +1525,8 @@
 
       // Faith-based puts bypass normal verification
       if ((msg._ || '').faith && (at.opt || '').faith && typeof msg._ === 'function') {
-        SEA.opt.pack(put, raw => {
-          SEA.verify(raw, false, data => {
+        SEA.opt.pack(put, function (raw) {
+          SEA.verify(raw, false, function (data) {
             put['='] = SEA.opt.unpack(data);
             eve.to.next(msg);
           });
@@ -1614,12 +1584,12 @@
     // Verify content-addressed data matches its hash
     check.hash = function (eve, msg, val, key, soul, at, no) {
       var hash = key.split('#').pop();
-      SEA.work(val, null, (b64hash) => {
+      SEA.work(val, null, function (b64hash) {
         var hexhash = base64ToHex(b64hash), b64slice = b64hash.slice(-20), hexslice = hexhash.slice(-20);
         if ([b64hash, b64slice, hexhash, hexslice].includes(hash)) return eve.to.next(msg);
         no("Data hash not same as hash!");
       }, { name: 'SHA-256' });
-    }    
+    }
 
     // Verify alias data matches its reference
     check.alias = function (eve, msg, val, key, soul, at, no) { // Example: {_:#~@, ~@alice: {#~@alice}}
@@ -1636,111 +1606,127 @@
     };
 
     // Complex verification for user account data including certificates
-    check.pub = async function (eve, msg, val, key, soul, at, no, user, pub) {
+    check.pub = function (eve, msg, val, key, soul, at, no, user, pub) {
       var tmp // Example: {_:#~asdf, hello:'world'~fdsa}}
-      var raw = await S.parse(val) || {}
 
-      // Certificate verification helper function
-      var verify = (certificate, certificant, cb) => {
-        if (certificate.m && certificate.s && certificant && pub)
-          // Verify certificate authenticity and permissions
-          return SEA.verify(certificate, pub, data => { // check if "pub" (of the graph owner) really issued this cert
-            if (u !== data && u !== data.e && msg.put['>'] > +data.e) return no("Certificate expired.") // certificate expired
-            // "data.c" = a list of certificants/certified users
-            // "data.w" = lex WRITE permission, in the future, there will be "data.r" which means lex READ permission
-            if (u !== data && data.c && data.w && (data.c.includes(certificant) || data.c.includes('*'))) {
-              // ok, now "certificant" is in the "certificants" list, but is "path" allowed? Check path
-              var path = soul.split('/').slice(1).join('/');
-              String.match = String.match || Gun.text.match;
-              var w = [].concat(data.w).filter(Boolean);
-              for (var lex of w) {
-                if (String.match(path, lex['#']) && (String.match(key, lex['.']) || !lex['.']) || String.match(key, lex['.']) && !lex['#'] || String.match((path ? path + '/' + key : key), lex['#'] || lex)) {
-                  // is Certificant forced to present in Path
-                  if (lex['+'] && lex['+'].indexOf('*') > -1 && path && path.indexOf(certificant) == -1 && key.indexOf(certificant) == -1) return no(`Path "${path}" or key "${key}" must contain string "${certificant}".`)
-                  // path is allowed, but is there any WRITE block? Check it out
-                  if (data.wb && (typeof data.wb === 'string' || ((data.wb || {})['#']))) { // "data.wb" = path to the WRITE block
-                    var root = eve.as.root.$.back(-1)
-                    if (typeof data.wb === 'string' && '~' !== data.wb.slice(0, 1)) root = root.get('~' + pub)
-                    return root.get(data.wb).get(certificant).once(value => { // TODO: INTENT TO DEPRECATE.
-                      if (value && (value === 1 || value === true)) return no(`Certificant ${certificant} blocked.`)
+      return new Promise(function(resolve) {
+        return S.parse(val).then(function(raw) {
+          raw = raw || {};
+
+          // Certificate verification helper function
+          var verify = function(certificate, certificant, cb) {
+            if (certificate.m && certificate.s && certificant && pub)
+              // Verify certificate authenticity and permissions
+              return SEA.verify(certificate, pub, function(data) { // check if "pub" (of the graph owner) really issued this cert
+                if (u !== data && u !== data.e && msg.put['>'] > +data.e) return no("Certificate expired.") // certificate expired
+                // "data.c" = a list of certificants/certified users
+                // "data.w" = lex WRITE permission, in the future, there will be "data.r" which means lex READ permission
+                if (u !== data && data.c && data.w && (data.c.includes(certificant) || data.c.includes('*'))) {
+                  // ok, now "certificant" is in the "certificants" list, but is "path" allowed? Check path
+                  var path = soul.split('/').slice(1).join('/');
+                  String.match = String.match || Gun.text.match;
+                  var w = [].concat(data.w).filter(Boolean);
+                  for (var lex of w) {
+                    if (String.match(path, lex['#']) && (String.match(key, lex['.']) || !lex['.']) || String.match(key, lex['.']) && !lex['#'] || String.match((path ? path + '/' + key : key), lex['#'] || lex)) {
+                      // is Certificant forced to present in Path
+                      if (lex['+'] && lex['+'].indexOf('*') > -1 && path && path.indexOf(certificant) == -1 && key.indexOf(certificant) == -1) return no(`Path "${path}" or key "${key}" must contain string "${certificant}".`)
+                      // path is allowed, but is there any WRITE block? Check it out
+                      if (data.wb && (typeof data.wb === 'string' || ((data.wb || {})['#']))) { // "data.wb" = path to the WRITE block
+                        var root = eve.as.root.$.back(-1)
+                        if (typeof data.wb === 'string' && '~' !== data.wb.slice(0, 1)) root = root.get('~' + pub)
+                        return root.get(data.wb).get(certificant).once(function(value) { // TODO: INTENT TO DEPRECATE.
+                          if (value && (value === 1 || value === true)) return no(`Certificant ${certificant} blocked.`)
+                          return cb(data)
+                        })
+                      }
                       return cb(data)
-                    })
+                    }
                   }
-                  return cb(data)
+                  return no("Certificate verification fail.")
                 }
-              }
-              return no("Certificate verification fail.")
-            }
-          })
-        return
-      }
-
-      // Verify account public key matches
-      if ('pub' === key && '~' + pub === soul) {
-        if (val === pub) return eve.to.next(msg) // the account MUST match `pub` property that equals the ID of the public key.
-        return no("Account not same!")
-      }
-
-      // Handle authenticated user writes
-      if ((tmp = user.is) && tmp.pub && !raw['*'] && !raw['+'] && (pub === tmp.pub || (pub !== tmp.pub && (((msg._ || {}).msg || {}).opt || {}).cert))) {
-        SEA.opt.pack(msg.put, packed => {
-          SEA.sign(packed, user._.sea, async data => {
-            if (u === data) return no(SEA.err || 'Signature fail.');
-
-            msg.put[':'] = { ':': tmp = SEA.opt.unpack(data.m), '~': data.s };
-            msg.put['='] = tmp;
-
-            // If writing to own graph
-            if (pub === user.is.pub) {
-              if (tmp = link_is(val)) at.sea.own[tmp] = at.sea.own[tmp] || {};
-              return JSON.stringifyAsync(msg.put[':'], (err, s) => err ? no(err || "Stringify error.") : (msg.put[':'] = s, eve.to.next(msg)));
-            }
-
-            // If writing to other's graph, check cert and inject
-            if (pub !== user.is.pub && (((msg._ || {}).msg || {}).opt || {}).cert) {
-              var cert = await S.parse(msg._.msg.opt.cert);
-              if ((cert || {}).m && (cert || {}).s) {
-                verify(cert, user.is.pub, () => {
-                  msg.put[':']['+'] = cert;
-                  msg.put[':']['*'] = user.is.pub;
-                  return JSON.stringifyAsync(msg.put[':'], (err, s) => err ? no(err || "Stringify error.") : (msg.put[':'] = s, eve.to.next(msg)));
-                });
-              }
-            }
-          }, { raw: 1 });
-        });
-        return;
-      }
-
-      // Handle signed but unauthenticated writes
-      if (tmp == user.is && !tmp && !raw['*'] && raw['m'] && raw['s']) {
-        SEA.opt.pack(msg.put, packed => {
-          SEA.verify(packed, pub, data => {
-            if (u === data || data !== raw['m']) return;
-            msg.put[':'] = JSON.stringify({ ':': raw['m'], '~': raw['s'] });
-            msg.put['='] = data;
-            return eve.to.next(msg);
-          });
-        });
-      }      
-
-      // Handle general data verification
-      SEA.opt.pack(msg.put, packed => {
-        SEA.verify(packed, raw['*'] || pub, data => {
-          data = SEA.opt.unpack(data);
-          if (u === data) return no("Unverified data.");
-          if (link_is(data) && pub === SEA.opt.pub(link_is(data))) at.sea.own[link_is(data)] = { [pub]: 1 };
-
-          var cert = raw['+'];
-          if (cert && cert['m'] && cert['s'] && raw['*']) {
-            verify(cert, raw['*'], () => { msg.put['='] = data; return eve.to.next(msg); });
-          } else {
-            msg.put['='] = data;
-            return eve.to.next(msg);
+              })
+            return
           }
+
+          // Verify account public key matches
+          if ('pub' === key && '~' + pub === soul) {
+            if (val === pub) return eve.to.next(msg) // the account MUST match `pub` property that equals the ID of the public key.
+            return no("Account not same!")
+          }
+
+          // Handle authenticated user writes
+          if ((tmp = user.is) && tmp.pub && !raw['*'] && !raw['+'] && (pub === tmp.pub || (pub !== tmp.pub && (((msg._ || {}).msg || {}).opt || {}).cert))) {
+            SEA.opt.pack(msg.put, function(packed) {
+              SEA.sign(packed, user._.sea, function(data) {
+                if (u === data) return no(SEA.err || 'Signature fail.');
+
+                msg.put[':'] = { ':': tmp = SEA.opt.unpack(data.m), '~': data.s };
+                msg.put['='] = tmp;
+
+                // If writing to own graph
+                if (pub === user.is.pub) {
+                  if (tmp = link_is(val)) at.sea.own[tmp] = at.sea.own[tmp] || {};
+                  return JSON.stringifyAsync(msg.put[':'], function(err, s) {
+                    if (err) return no(err || "Stringify error.");
+                    msg.put[':'] = s;
+                    return eve.to.next(msg);
+                  });
+                }
+
+                // If writing to other's graph, check cert and inject
+                if (pub !== user.is.pub && (((msg._ || {}).msg || {}).opt || {}).cert) {
+                  return S.parse(msg._.msg.opt.cert).then(function(cert) {
+                    if ((cert || {}).m && (cert || {}).s) {
+                      verify(cert, user.is.pub, function() {
+                        msg.put[':']['+'] = cert;
+                        msg.put[':']['*'] = user.is.pub;
+                        return JSON.stringifyAsync(msg.put[':'], function(err, s) {
+                          if (err) return no(err || "Stringify error.");
+                          msg.put[':'] = s;
+                          return eve.to.next(msg);
+                        });
+                      });
+                    }
+                  });
+                }
+              }, { raw: 1 });
+            });
+            return;
+          }
+
+          // Handle signed but unauthenticated writes
+          if (tmp == user.is && !tmp && !raw['*'] && raw['m'] && raw['s']) {
+            SEA.opt.pack(msg.put, function(packed) {
+              SEA.verify(packed, pub, function(data) {
+                if (u === data || data !== raw['m']) return;
+                msg.put[':'] = JSON.stringify({ ':': raw['m'], '~': raw['s'] });
+                msg.put['='] = data;
+                return eve.to.next(msg);
+              });
+            });
+          }      
+
+          // Handle general data verification
+          SEA.opt.pack(msg.put, function(packed) {
+            SEA.verify(packed, raw['*'] || pub, function(data) {
+              data = SEA.opt.unpack(data);
+              if (u === data) return no("Unverified data.");
+              if (link_is(data) && pub === SEA.opt.pub(link_is(data))) at.sea.own[link_is(data)] = { [pub]: 1 };
+
+              var cert = raw['+'];
+              if (cert && cert['m'] && cert['s'] && raw['*']) {
+                verify(cert, raw['*'], function() { 
+                  msg.put['='] = data; 
+                  return eve.to.next(msg); 
+                });
+              } else {
+                msg.put['='] = data;
+                return eve.to.next(msg);
+              }
+            });
+          });      
         });
-      });      
-      return
+      });
     };
 
     // Default security check for unsigned data

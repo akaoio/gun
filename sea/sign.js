@@ -6,73 +6,106 @@
     var sha = require('./sha256');
     var u;
 
-    SEA.sign = SEA.sign || (async (data, pair, cb, opt) => {
-      try {
-        // Ensure options are initialized
-        opt = opt || {};
+    SEA.sign = function(data, pair, cb, opt) {
+      return new Promise(function(resolve) {
+        try {
+          opt = opt || {};
 
-        // Check if the private key is available, if not, retrieve it
-        if (!(pair || opt).priv) {
-          if (!SEA.I) { throw 'No signing key.' }
-          pair = await SEA.I(null, { what: data, how: 'sign', why: opt.why });
-        }
-
-        // Validate the data
-        if (u === data) { throw '`undefined` not allowed.' }
-
-        // Parse the data
-        var json = await S.parse(data);
-
-        // Set the check option, defaulting to the parsed data
-        var check = opt.check = opt.check || json;
-
-        // If the data is already signed, return the signed data
-        if (SEA.verify && (SEA.opt.check(check) || (check && check.s && check.m))
-          && u !== await SEA.verify(check, pair)) {
-          var r = await S.parse(check);
-          if (!opt.raw) { r = 'SEA' + await shim.stringify(r); }
-          if (cb) { 
-            try { 
-              cb(r); 
-            } catch (e) { 
-              console.log(e); 
-            } 
+          if (u === data) { 
+            throw '`undefined` not allowed.';
           }
-          return r;
+
+          function checkPair() {
+            if (!(pair || opt).priv) {
+              if (!SEA.I) { 
+                throw 'No signing key.';
+              }
+              return SEA.I(null, { what: data, how: 'sign', why: opt.why })
+              .then(function(key) {
+                pair = key;
+                return processData();
+              });
+            }
+            return processData();
+          }
+
+          function processData() {
+            return S.parse(data).then(function(json) {
+              var check = opt.check = opt.check || json;
+
+              if (SEA.verify && (SEA.opt.check(check) || (check && check.s && check.m))) {
+                return SEA.verify(check, pair).then(function(ok) {
+                  if (u === ok) {
+                    return sign(json);
+                  }
+                  return S.parse(check).then(function(r) {
+                    if (!opt.raw) {
+                      return shim.stringify(r).then(function(r) {
+                        return finish('SEA' + r);
+                      });
+                    }
+                    return finish(r);
+                  });
+                });
+              }
+              return sign(json);
+            });
+          }
+
+          function sign(json) {
+            return sha(json).then(function(hash) {
+              var jwk = S.jwk(pair.pub, pair.priv);
+              return (shim.ossl || shim.subtle).importKey('jwk', jwk, {
+                name: 'ECDSA',
+                namedCurve: 'P-256'
+              }, false, ['sign'])
+              .then(function(key) {
+                return (shim.ossl || shim.subtle).sign({
+                  name: 'ECDSA',
+                  hash: { name: 'SHA-256' }
+                }, key, new Uint8Array(hash));
+              })
+              .then(function(sig) {
+                var r = {
+                  m: json,
+                  s: shim.Buffer.from(sig, 'binary').toString(opt.encode || 'base64')
+                };
+                if (!opt.raw) {
+                  return shim.stringify(r).then(function(r) {
+                    return finish('SEA' + r);
+                  });
+                }
+                return finish(r);
+              });
+            });
+          }
+
+          function finish(r) {
+            if (cb) {
+              try {
+                cb(r);
+              } catch(e) {
+                console.log(e);
+              }
+            }
+            return resolve(r);
+          }
+
+          checkPair();
+
+        } catch(e) {
+          console.log(e);
+          SEA.err = e;
+          if (SEA.throw) {
+            throw e;
+          }
+          if (cb) {
+            cb();
+          }
+          resolve();
         }
-
-        // Prepare the public and private keys
-        var pub = pair.pub;
-        var priv = pair.priv;
-        var jwk = S.jwk(pub, priv);
-
-        // Hash the data and sign it
-        var hash = await sha(json);
-        var sig = await (shim.ossl || shim.subtle).importKey('jwk', jwk, { name: 'ECDSA', namedCurve: 'P-256' }, false, ['sign'])
-          .then((key) => (shim.ossl || shim.subtle).sign({ name: 'ECDSA', hash: { name: 'SHA-256' } }, key, new Uint8Array(hash)));
-
-        // Create the result object
-        var r = { m: json, s: shim.Buffer.from(sig, 'binary').toString(opt.encode || 'base64') };
-        if (!opt.raw) { r = 'SEA' + await shim.stringify(r); }
-
-        // Execute the callback if provided
-        if (cb) { 
-          try { 
-            cb(r); 
-          } catch (e) { 
-            console.log(e); 
-          } 
-        }
-
-        return r;
-      } catch (e) {
-        console.log(e);
-        SEA.err = e;
-        if (SEA.throw) { throw e; }
-        if (cb) { cb(); }
-        return;
-      }
-    });    
+      });
+    };
 
     module.exports = SEA.sign;
   

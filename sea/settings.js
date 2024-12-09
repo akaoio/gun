@@ -32,14 +32,7 @@
     };
 
     s.check = function (t) { return (typeof t == 'string') && ('SEA{' === t.slice(0, 4)) }
-    s.parse = async function p(t) {
-      try {
-        var yes = (typeof t == 'string');
-        if (yes && 'SEA{' === t.slice(0, 4)) { t = t.slice(3) }
-        return yes ? await shim.parse(t) : t;
-      } catch (e) { }
-      return t;
-    }
+    s.parse = t => Promise.resolve(typeof t == 'string' ? shim.parse('SEA{' === t.slice(0, 4) ? t.slice(3) : t) : t).catch(() => t);
 
     SEA.opt = s;
     module.exports = s
