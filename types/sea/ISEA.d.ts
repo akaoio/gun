@@ -56,10 +56,10 @@ export interface ISEA {
    * Adds a signature to a message, for data that you want to
    *  prevent attackers tampering with. The default
    *  cryptographic primitive signs a SHA256 fingerprint of the
-   *  data
+   *  data. Also supports WebAuthn signatures.
    *
    * @param data the content that you want to prove is authorized
-   * @param pair SEA pair or a function that returns a signature
+   * @param pair SEA pair or a function that returns a WebAuthn signature or string
    * @param cb Optional callback function
    * @param opt Optional options object
    */
