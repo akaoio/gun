@@ -44,7 +44,7 @@ export interface ISEA {
    * @param opt Optional configuration object that can contain seed, priv, or epriv
    */
   pair(
-    callback?: (data: ISEAPair) => void,
+    callback?: (data: ISEAPair) => void | null,
     opt?: {
       seed?: string;
       priv?: string;
