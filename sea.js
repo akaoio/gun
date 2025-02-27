@@ -338,7 +338,11 @@
       let r = {};
 
       if(opt && opt.seed){
-        r = { priv: await h(opt.seed+'-sign'), epriv: await h(opt.seed+'-encrypt') };
+        let seed = opt.seed;
+        if(seed instanceof ArrayBuffer) {
+          seed = String.fromCharCode.apply(null, new Uint8Array(seed));
+        }
+        r = { priv: await h(seed+'-sign'), epriv: await h(seed+'-encrypt') };
       }
       else if(opt && opt.priv){
         r = { priv: opt.priv, epriv: opt.epriv || await h(opt.priv+'-encrypt') };
@@ -1485,7 +1489,7 @@
 
       // Localize some opt props, and delete the original refs to prevent possible attacks
       const opt = (msg._.msg || {}).opt || {}
-      const authenticator = opt.authenticator || (user._).sea;
+      const authenticator = opt.authenticator || (user._ || {}).sea;
       const upub = opt.authenticator ? (opt.pub || (user.is || {}).pub || pub) : (user.is || {}).pub;
       const cert = opt.cert;
       delete opt.authenticator; delete opt.pub;
@@ -1510,7 +1514,7 @@
 
             // if writing to own graph, just allow it
             if (pub === upub) {
-              // if (tmp = link_is(val)) (at.sea.own[tmp] = at.sea.own[tmp] || {})[pub] = 1
+              if (tmp = link_is(val)) (at.sea.own[tmp] = at.sea.own[tmp] || {})[pub] = 1
               next()
               return
             }
