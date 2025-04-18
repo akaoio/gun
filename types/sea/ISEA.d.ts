@@ -39,19 +39,41 @@ export interface ISEA {
    * Note: API subject to change we may change the parameters to accept data and work, in addition to generation.
    * You will need this for most of SEA's API, see those method's examples.
    * The default cryptographic primitives for the asymmetric keys are ECDSA for signing and ECDH for encryption.
+   * 
+   * @param callback Optional callback to be called with the generated key pair
+   * @param opt Optional configuration object that can contain seed, priv, or epriv
    */
-  pair(callback?: (data: ISEAPair) => void): Promise<ISEAPair>;
+  pair(
+    callback?: (data: ISEAPair) => void | null,
+    opt?: {
+      seed?: string;
+      priv?: string;
+      epriv?: string;
+    }
+  ): Promise<ISEAPair>;
 
   /**
    * Adds a signature to a message, for data that you want to
    *  prevent attackers tampering with. The default
    *  cryptographic primitive signs a SHA256 fingerprint of the
-   *  data
+   *  data. Also supports WebAuthn signatures.
    *
    * @param data the content that you want to prove is authorized
-   * @param pair SEA pair
+   * @param pair SEA pair or a function that returns a WebAuthn signature or string
+   * @param cb Optional callback function
+   * @param opt Optional options object
    */
-  sign(data: any, pair: { priv: string; pub: string }): Promise<string>;
+  sign(
+    data: any, 
+    pair: { priv: string; pub: string } | ((data: any) => Promise<{ signature?: any; authenticatorData?: any; clientDataJSON?: any } | string>), 
+    cb?: (data: string | undefined) => void,
+    opt?: {
+      encode?: 'base64' | 'utf8' | 'hex';
+      raw?: boolean;
+      check?: any;
+      why?: string;
+    }
+  ): Promise<string | undefined>;
 
   /**
    * Do you want to allow others to write to parts of your own
@@ -99,14 +121,21 @@ export interface ISEA {
    *  as coming from the person you expect
    *
    * @param message what comes from `.sign`
-   * @param pair from `.pair` or its public key text (`pair.pub`)
+   * @param pair from `.pair` or its public key text (`pair.pub`). 
+   *        Se impostato a `false`, restituisce i dati senza verifica
+   * @param cb Optional callback to execute with the verified data
+   * @param opt Optional options object
    * @returns the data if and only if the message can be
    *  verified as coming from the person you expect
    */
   verify<T extends unknown = any>(
     message: string,
-    pair: string | { pub: string } | string
-  ): Promise<T>;
+    pair: string | { pub: string } | boolean,
+    cb?: (data: T | undefined) => void,
+    opt?: {
+      encode?: 'base64' | 'utf8' | 'hex';
+    }
+  ): Promise<T | undefined>;
 
   /**
    * Takes some data that you want to keep secret and encrypts
