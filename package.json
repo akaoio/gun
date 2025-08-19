@@ -1,5 +1,5 @@
 {
-  "name": "gun",
+  "name": "@akaoio/gun",
   "version": "0.2020.1239",
   "description": "A realtime, decentralized, offline-first, graph data synchronization engine.",
   "types": "index.d.ts",
@@ -11,7 +11,8 @@
     "start": "node --prof examples/http.js",
     "debug": "node --prof-process --preprocess -j isolate*.log > v8data.json && rm isolate*.log && echo 'drag & drop ./v8data.json into https://mapbox.github.io/flamebearer/'",
     "https": "HTTPS_KEY=test/https/server.key HTTPS_CERT=test/https/server.crt npm start",
-    "prepublishOnly": "npm run unbuild",
+    "build": "node lib/unbuild.js & npm run minify",
+    "prepublishOnly": "npm run build",
     "test": "echo 'Did you run PANIC holy-grail, 1~X, on-recover, etc.?' && mocha",
     "testSea": "mocha test/sea/sea.js",
     "e2e": "mocha e2e/distributed.js",
@@ -24,7 +25,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/amark/gun.git"
+    "url": "git+https://github.com/akaoio/gun.git"
   },
   "keywords": [
     "gun",
@@ -50,9 +51,9 @@
   "author": "Mark Nadal",
   "license": "(Zlib OR MIT OR Apache-2.0)",
   "bugs": {
-    "url": "https://github.com/amark/gun/issues"
+    "url": "https://github.com/akaoio/gun/issues"
   },
-  "homepage": "https://github.com/amark/gun#readme",
+  "homepage": "https://github.com/akaoio/gun#readme",
   "engines": {
     "node": ">=0.8.4"
   },

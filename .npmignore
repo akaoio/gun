@@ -3,3 +3,15 @@
 !*.d.ts
 *.radata
 isolate-*
+test/
+examples/
+hooks/
+Dockerfile
+.git/
+.github/
+*.log
+node_modules/
+radata/
+radatatest/
+stats.radata
+claude
