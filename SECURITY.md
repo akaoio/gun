@@ -1,17 +1,42 @@
-# Security Policy
+# Security Policy - @akaoio/gun Enhanced Security Fork
 
 ## Introduction
 
-Security is our top priority. We are committed to ensuring that our project is as secure as possible for everyone who uses it. This document outlines our security policy and procedures for dealing with security issues.
+**@akaoio/gun** is a security-hardened fork of GUN with enterprise-grade cryptographic enhancements and WebAuthn support. Security is our absolute top priority, and this fork includes significant security improvements over the original GUN implementation while maintaining full backward compatibility.
+
+## 🔐 Security Enhancements in @akaoio/gun
+
+This fork addresses several critical security areas with substantial improvements:
+
+### WebAuthn & Hardware Authentication
+- **Hardware Security Keys**: Full support for YubiKey, Titan, FIDO2 keys
+- **Biometric Authentication**: Face ID, Touch ID, Windows Hello integration
+- **Enhanced Authentication Flow**: Seamless WebAuthn integration with existing GUN user APIs
+- **Multi-Factor Authentication**: Hardware-backed second factor authentication
+
+### Cryptographic Improvements
+- **Deterministic Key Generation**: Reproducible cryptographic keys from seeds
+- **Enhanced ECC Validation**: Complete elliptic curve point validation with missing B parameter fix
+- **ArrayBuffer Support**: Modern binary data operations for crypto functions
+- **PBKDF2 Hardening**: Improved salt handling and numeric conversion security
+
+### Security Hardening Features
+- **Attack Prevention**: Enhanced user object destructuring to prevent common attacks
+- **Secure Options**: Localized options in SEA.check.pub to prevent manipulation
+- **Signature Validation**: Improved WebAuthn signature handling and verification
+- **Vulnerability Fixes**: Multiple security patches for known cryptographic issues
 
 ## Supported Versions
 
-We provide security updates for the following versions of our project:
+We provide security updates for the following versions:
 
-| Version | Supported          |
-| ------- | ------------------ |
-| 0.2020.x| :white_check_mark: |
-| < 0.2020| :x:                |
+| Version | Supported | Security Enhancements |
+| ------- | --------- | -------------------- |
+| @akaoio/gun 0.2020.x | ✅ **Recommended** | Full security suite + WebAuthn |
+| Original GUN 0.2020.x | ⚠️ Basic support | Original security only |
+| < 0.2020 | ❌ Not supported | Deprecated |
+
+**Migration Recommendation**: For new projects and security-sensitive applications, use `@akaoio/gun` for enhanced security features while maintaining full compatibility.
 
 ## Reporting a Vulnerability
 
@@ -36,7 +61,20 @@ If the vulnerability is confirmed, we will work on a fix and plan a release. We 
 
 ## Security Practices
 
-We follow industry-standard security practices, including regular audits of the services and features we provide, to maintain the trust of our users.
+### Enhanced Security Implementation
+We follow industry-standard security practices with additional enhancements:
+
+- **Cryptographic Best Practices**: All crypto operations use vetted algorithms and implementations
+- **WebAuthn Compliance**: Full FIDO2/WebAuthn specification compliance for hardware authentication
+- **Regular Security Audits**: Continuous code review and security testing of enhancements
+- **Vulnerability Management**: Proactive identification and remediation of security issues
+- **Secure Development**: Security-first approach to all new features and improvements
+
+### Technical Security Measures
+- **ECC Curve Validation**: Complete point validation prevents invalid curve attacks
+- **Deterministic Security**: Reproducible key generation with cryptographically secure seeds  
+- **Memory Safety**: Proper handling of sensitive cryptographic material
+- **Timing Attack Prevention**: Constant-time operations where cryptographically relevant
 
 ## Security Updates
 
