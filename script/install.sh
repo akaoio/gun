@@ -138,22 +138,69 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-# Use environment variables if not set by flags
-VERSION="${VERSION:-$VERSION}"
-PORT="${PORT:-$PORT}"
-PEERS="${PEERS:-$PEERS}"
-RAD="${RAD:-$RAD}"
-HTTPS_KEY="${HTTPS_KEY:-$HTTPS_KEY}"
-HTTPS_CERT="${HTTPS_CERT:-$HTTPS_CERT}"
-SERVICE_NAME="${SERVICE_NAME:-$SERVICE_NAME}"
-INSTALL_DIR="${INSTALL_DIR:-$INSTALL_DIR}"
+# Input validation functions
+validate_port() {
+    local port="$1"
+    if [[ ! "$port" =~ ^[0-9]+$ ]] || [[ "$port" -lt 1 ]] || [[ "$port" -gt 65535 ]]; then
+        log_error "Invalid port: $port. Must be between 1-65535"
+        exit 1
+    fi
+}
 
-# Dry run function
+validate_path() {
+    local path="$1"
+    # Prevent path traversal
+    if [[ "$path" =~ \.\./ ]] || [[ "$path" =~ ^/ && "$path" != /home/* && "$path" != /opt/* && "$path" != /usr/local/* ]]; then
+        log_error "Invalid path: $path. Potential security risk detected"
+        exit 1
+    fi
+}
+
+validate_service_name() {
+    local name="$1"
+    if [[ ! "$name" =~ ^[a-zA-Z0-9_-]+$ ]]; then
+        log_error "Invalid service name: $name. Must contain only alphanumeric, underscore, or dash"
+        exit 1
+    fi
+}
+
+# Use environment variables if not set by flags (with validation)
+VERSION="${VERSION:-master}"
+PORT="${PORT:-8765}"
+PEERS="${PEERS:-}"
+RAD="${RAD:-true}"
+HTTPS_KEY="${HTTPS_KEY:-}"
+HTTPS_CERT="${HTTPS_CERT:-}"
+SERVICE_NAME="${SERVICE_NAME:-relay}"
+INSTALL_DIR="${INSTALL_DIR:-$HOME/gun}"
+
+# Validate inputs
+validate_port "$PORT"
+validate_path "$INSTALL_DIR"
+validate_service_name "$SERVICE_NAME"
+[[ -n "$HTTPS_KEY" ]] && validate_path "$HTTPS_KEY"
+[[ -n "$HTTPS_CERT" ]] && validate_path "$HTTPS_CERT"
+
+# Enhanced execute function with error handling
 execute() {
     if [[ "$DRY_RUN" == "true" ]]; then
         log_info "[DRY RUN] Would execute: $*"
+        return 0
+    fi
+    
+    local cmd="$1"
+    shift
+    
+    # Log command execution
+    log_info "Executing: $cmd $*"
+    
+    # Execute with timeout and error handling
+    if timeout 300 "$cmd" "$@"; then
+        return 0
     else
-        "$@"
+        local exit_code=$?
+        log_error "Command failed (exit code $exit_code): $cmd $*"
+        return $exit_code
     fi
 }
 
@@ -182,7 +229,32 @@ install_dependencies() {
     # Detect package manager and install dependencies
     if command -v apt-get &> /dev/null; then
         execute $SUDO apt-get update -y
-        execute $SUDO apt-get install -y curl git systemd nodejs npm
+        # Install Node.js via NodeSource repository to avoid conflicts
+        if ! command -v node &> /dev/null; then
+            log_info "Installing Node.js via NodeSource repository..."
+            
+            # Download and verify NodeSource setup script
+            local setup_script="/tmp/nodejs_setup_$$.sh"
+            if execute curl -fsSL "https://deb.nodesource.com/setup_lts.x" -o "$setup_script"; then
+                # Basic validation - check if it looks like a proper setup script
+                if grep -q "NODE_SETUP" "$setup_script" && grep -q "apt-get" "$setup_script"; then
+                    log_info "NodeSource script downloaded and validated"
+                    execute $SUDO bash "$setup_script"
+                    execute rm -f "$setup_script"
+                else
+                    log_error "Downloaded script failed validation"
+                    execute rm -f "$setup_script"
+                    exit 1
+                fi
+            else
+                log_error "Failed to download NodeSource setup script"
+                exit 1
+            fi
+            
+            execute $SUDO apt-get install -y nodejs
+        fi
+        # Install other dependencies
+        execute $SUDO apt-get install -y curl git systemd
     elif command -v yum &> /dev/null; then
         execute $SUDO yum check-update -y || true
         execute $SUDO yum install -y curl git systemd nodejs npm
@@ -267,7 +339,7 @@ Restart=always
 RestartSec=1
 User=$(whoami)
 WorkingDirectory=$INSTALL_DIR
-ExecStart=/usr/bin/node $INSTALL_DIR/examples/http.js
+ExecStart=/usr/bin/node $INSTALL_DIR/script/server.js
 $(echo -e "$ENV_VARS")
 
 [Install]
@@ -287,7 +359,7 @@ Restart=always
 RestartSec=1
 User=$(whoami)
 WorkingDirectory=$INSTALL_DIR
-ExecStart=/usr/bin/node $INSTALL_DIR/examples/http.js
+ExecStart=/usr/bin/node $INSTALL_DIR/script/server.js
 $(echo -e "$ENV_VARS")
 
 [Install]
@@ -341,6 +413,34 @@ start_service() {
     fi
 }
 
+# Rollback function for failed installations
+rollback() {
+    log_warn "Installation failed, rolling back changes..."
+    
+    # Stop and remove service if it was created
+    if [[ -f "/etc/systemd/system/${SERVICE_NAME}.service" ]]; then
+        $SUDO systemctl stop "$SERVICE_NAME" 2>/dev/null || true
+        $SUDO systemctl disable "$SERVICE_NAME" 2>/dev/null || true
+        $SUDO rm -f "/etc/systemd/system/${SERVICE_NAME}.service"
+        $SUDO systemctl daemon-reload
+        log_info "Removed service: $SERVICE_NAME"
+    fi
+    
+    # Remove installation directory if we created it
+    if [[ -d "$INSTALL_DIR" && "$INSTALL_DIR" != "$HOME" && "$INSTALL_DIR" != "/" ]]; then
+        if confirm "Remove incomplete installation at $INSTALL_DIR?"; then
+            rm -rf "$INSTALL_DIR"
+            log_info "Removed directory: $INSTALL_DIR"
+        fi
+    fi
+    
+    log_error "Installation rolled back due to errors"
+    exit 1
+}
+
+# Set up error trap
+trap rollback ERR
+
 # Main installation process
 main() {
     log_info "Starting GUN installation..."
@@ -352,6 +452,21 @@ main() {
     [[ -n "$HTTPS_KEY" ]] && log_info "HTTPS Key: $HTTPS_KEY"
     [[ -n "$HTTPS_CERT" ]] && log_info "HTTPS Cert: $HTTPS_CERT"
     
+    # Pre-flight checks
+    if [[ -d "$INSTALL_DIR" ]] && [[ "$(ls -A "$INSTALL_DIR" 2>/dev/null)" ]]; then
+        if ! confirm "Directory $INSTALL_DIR is not empty. Continue?"; then
+            log_info "Installation cancelled"
+            exit 0
+        fi
+    fi
+    
+    # Check disk space (need at least 500MB)
+    local available_space=$(df "$(dirname "$INSTALL_DIR")" | awk 'NR==2 {print $4}')
+    if [[ "$available_space" -lt 512000 ]]; then
+        log_error "Insufficient disk space. Need at least 500MB, have $((available_space/1024))MB"
+        exit 1
+    fi
+    
     check_sudo
     install_dependencies
     install_gun
@@ -359,7 +474,10 @@ main() {
     configure_limits
     start_service
     
-    log_info "GUN installation completed!"
+    # Disable error trap on successful completion
+    trap - ERR
+    
+    log_info "GUN installation completed successfully!"
     if [[ "$SKIP_SERVICE" != "true" ]]; then
         log_info "Service: systemctl status $SERVICE_NAME"
         log_info "Logs: journalctl -u $SERVICE_NAME -f"

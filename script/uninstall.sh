@@ -128,9 +128,38 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-# Use environment variables if not set by flags
-SERVICE_NAME="${SERVICE_NAME:-$SERVICE_NAME}"
-INSTALL_DIR="${INSTALL_DIR:-$INSTALL_DIR}"
+# Input validation functions
+validate_service_name() {
+    local name="$1"
+    if [[ ! "$name" =~ ^[a-zA-Z0-9_-]+$ ]]; then
+        log_error "Invalid service name: $name. Must contain only alphanumeric, underscore, or dash"
+        exit 1
+    fi
+}
+
+validate_path() {
+    local path="$1"
+    # Prevent path traversal
+    if [[ "$path" =~ \.\./ ]]; then
+        log_error "Path traversal detected: $path"
+        exit 1
+    fi
+    # Prevent dangerous system directories
+    case "$path" in
+        /|/bin|/sbin|/usr|/etc|/var|/lib|/proc|/sys)
+            log_error "Refusing to operate on system directory: $path"
+            exit 1
+            ;;
+    esac
+}
+
+# Use environment variables with validation
+SERVICE_NAME="${SERVICE_NAME:-relay}"
+INSTALL_DIR="${INSTALL_DIR:-$HOME/gun}"
+
+# Validate inputs
+validate_service_name "$SERVICE_NAME"
+validate_path "$INSTALL_DIR"
 
 # Check if running as root for system operations
 check_sudo() {
@@ -145,12 +174,25 @@ check_sudo() {
     fi
 }
 
-# Dry run function
+# Enhanced execute function with timeout and error handling
 execute() {
     if [[ "$DRY_RUN" == "true" ]]; then
         log_info "[DRY RUN] Would execute: $*"
+        return 0
+    fi
+    
+    local cmd="$1"
+    shift
+    
+    log_info "Executing: $cmd $*"
+    
+    # Execute with timeout
+    if timeout 120 "$cmd" "$@"; then
+        return 0
     else
-        "$@"
+        local exit_code=$?
+        log_error "Command failed (exit code $exit_code): $cmd $*"
+        return $exit_code
     fi
 }
 
@@ -215,7 +257,36 @@ remove_gun() {
     
     log_info "Removing GUN installation: $INSTALL_DIR"
     
+    # Additional safety checks before removal
+    if [[ ! -d "$INSTALL_DIR" ]]; then
+        log_info "Directory does not exist: $INSTALL_DIR"
+        return
+    fi
+    
+    # Verify it looks like a GUN installation
+    if [[ ! -f "$INSTALL_DIR/package.json" ]] || ! grep -q '"name".*"gun"\|"@akaoio/gun"' "$INSTALL_DIR/package.json" 2>/dev/null; then
+        log_warn "Directory does not appear to be a GUN installation: $INSTALL_DIR"
+        if ! confirm "Remove directory anyway?"; then
+            log_info "Keeping directory"
+            return
+        fi
+    fi
+    
     if confirm "Remove GUN installation directory $INSTALL_DIR?"; then
+        # Stop any processes using the directory first
+        local pids=$(lsof +D "$INSTALL_DIR" 2>/dev/null | awk 'NR>1 {print $2}' | sort -u || true)
+        if [[ -n "$pids" ]]; then
+            log_warn "Processes are using files in $INSTALL_DIR: $pids"
+            if confirm "Kill these processes before removal?"; then
+                echo "$pids" | xargs -r kill -TERM
+                sleep 2
+                echo "$pids" | xargs -r kill -KILL 2>/dev/null || true
+            else
+                log_error "Cannot remove directory while processes are using it"
+                return 1
+            fi
+        fi
+        
         execute rm -rf "$INSTALL_DIR"
         log_info "GUN installation removed"
     else

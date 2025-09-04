@@ -18,6 +18,12 @@ DRY_RUN=false
 STAGING=false
 RELOAD_CMD=""
 AUTO_UPGRADE=true
+STANDALONE=false
+DNS_MODE=false
+DNS_PROVIDER=""
+DNS_API_KEY=""
+DNS_API_SECRET=""
+DNS_EMAIL=""
 
 # Colors for output
 RED='\033[0;31m'
@@ -44,6 +50,11 @@ OPTIONAL:
     -c, --cert-file PATH       Output path for certificate (default: ~/cert.pem)
     --acme-dir PATH            ACME installation directory (default: ~/.acme.sh)
     --reload-cmd COMMAND       Command to run after certificate installation
+    --standalone               Use standalone mode (temporary web server on port 80)
+    --dns [PROVIDER]          Use DNS validation. Options: manual, cloudflare, route53, digitalocean
+    --dns-api-key KEY         DNS provider API key (required for automatic DNS)
+    --dns-api-secret SECRET   DNS provider API secret (for some providers)
+    --dns-email EMAIL         DNS provider email (for Cloudflare)
     --force                    Force reinstallation of acme.sh
     --staging                  Use Let's Encrypt staging environment (for testing)
     --no-auto-upgrade          Disable automatic acme.sh upgrades
@@ -56,6 +67,18 @@ ENVIRONMENT VARIABLES:
 EXAMPLES:
     # Basic certificate for a domain
     $0 --domain example.com --email admin@example.com
+
+    # Standalone mode (no web server needed)
+    $0 --domain example.com --email admin@example.com --standalone
+
+    # DNS validation with Cloudflare (automatic)
+    $0 --domain example.com --email admin@example.com --dns cloudflare --dns-api-key YOUR_CF_API_KEY --dns-email admin@example.com
+
+    # DNS validation with Route53 (automatic)
+    $0 --domain example.com --email admin@example.com --dns route53 --dns-api-key AWS_KEY --dns-api-secret AWS_SECRET
+
+    # Manual DNS validation (IPv6-only servers)
+    $0 --domain example.com --email admin@example.com --dns
 
     # Certificate with custom webroot and reload command
     $0 -d example.com -e admin@example.com -w /var/www/html --reload-cmd "systemctl reload nginx"
@@ -117,6 +140,31 @@ while [[ $# -gt 0 ]]; do
             RELOAD_CMD="$2"
             shift 2
             ;;
+        --standalone)
+            STANDALONE=true
+            shift
+            ;;
+        --dns)
+            DNS_MODE=true
+            DNS_PROVIDER="${2:-manual}"
+            if [[ "$2" && "$2" != --* ]]; then
+                shift 2
+            else
+                shift
+            fi
+            ;;
+        --dns-api-key)
+            DNS_API_KEY="$2"
+            shift 2
+            ;;
+        --dns-api-secret)
+            DNS_API_SECRET="$2"
+            shift 2
+            ;;
+        --dns-email)
+            DNS_EMAIL="$2"
+            shift 2
+            ;;
         --force)
             FORCE_INSTALL=true
             shift
@@ -145,13 +193,56 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-# Use environment variables if not set by flags
-DOMAIN="${DOMAIN:-$DOMAIN}"
-EMAIL="${EMAIL:-$EMAIL}"
-WEBROOT="${WEBROOT:-$WEBROOT}"
-KEY_FILE="${KEY_FILE:-$KEY_FILE}"
-CERT_FILE="${CERT_FILE:-$CERT_FILE}"
-RELOAD_CMD="${RELOAD_CMD:-$RELOAD_CMD}"
+# Input validation functions
+validate_domain() {
+    local domain="$1"
+    # Basic domain validation - RFC compliant
+    if [[ ! "$domain" =~ ^[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?)*$ ]]; then
+        log_error "Invalid domain format: $domain"
+        exit 1
+    fi
+    if [[ ${#domain} -gt 253 ]]; then
+        log_error "Domain too long: $domain (max 253 chars)"
+        exit 1
+    fi
+}
+
+validate_email() {
+    local email="$1"
+    # Basic email validation
+    if [[ ! "$email" =~ ^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$ ]]; then
+        log_error "Invalid email format: $email"
+        exit 1
+    fi
+}
+
+validate_path() {
+    local path="$1"
+    # Prevent path traversal attacks
+    if [[ "$path" =~ \.\./ ]]; then
+        log_error "Path traversal detected: $path"
+        exit 1
+    fi
+    # Ensure absolute paths for key files
+    if [[ "$path" =~ \.(pem|key|crt|cert)$ && ! "$path" =~ ^/ ]]; then
+        log_error "Key/cert files must use absolute paths: $path"
+        exit 1
+    fi
+}
+
+sanitize_command() {
+    local cmd="$1"
+    # Remove potentially dangerous characters
+    echo "$cmd" | sed 's/[;&|`$(){}\[\]\\]//g'
+}
+
+# Use environment variables if not set by flags (with defaults)
+DOMAIN="${DOMAIN:-}"
+EMAIL="${EMAIL:-}"
+WEBROOT="${WEBROOT:-}"
+KEY_FILE="${KEY_FILE:-$HOME/key.pem}"
+CERT_FILE="${CERT_FILE:-$HOME/cert.pem}"
+RELOAD_CMD="${RELOAD_CMD:-}"
 
 # Validate required parameters
 if [[ -z "$DOMAIN" ]]; then
@@ -165,6 +256,14 @@ if [[ -z "$EMAIL" ]]; then
     show_help
     exit 1
 fi
+
+# Validate inputs
+validate_domain "$DOMAIN"
+validate_email "$EMAIL"
+[[ -n "$WEBROOT" ]] && validate_path "$WEBROOT"
+validate_path "$KEY_FILE"
+validate_path "$CERT_FILE"
+[[ -n "$RELOAD_CMD" ]] && RELOAD_CMD="$(sanitize_command "$RELOAD_CMD")"
 
 # Set default webroot if not specified
 if [[ -z "$WEBROOT" ]]; then
@@ -238,7 +337,33 @@ issue_certificate() {
     log_info "Issuing certificate for domain: $DOMAIN"
     
     # Build acme.sh command
-    ACME_CMD="$ACME_DIR/acme.sh --issue -d $DOMAIN -w $WEBROOT"
+    if [[ "$STANDALONE" == "true" ]]; then
+        ACME_CMD="$ACME_DIR/acme.sh --server letsencrypt --issue -d $DOMAIN --standalone"
+        log_info "Using standalone mode (temporary web server on port 80)"
+    elif [[ "$DNS_MODE" == "true" ]]; then
+        # Setup DNS provider environment variables
+        if [[ "$DNS_PROVIDER" == "cloudflare" ]]; then
+            [[ -n "$DNS_API_KEY" ]] && export CF_Key="$DNS_API_KEY"
+            [[ -n "$DNS_EMAIL" ]] && export CF_Email="$DNS_EMAIL"
+            ACME_CMD="$ACME_DIR/acme.sh --server letsencrypt --issue -d $DOMAIN --dns dns_cf"
+            log_info "Using Cloudflare automatic DNS validation"
+        elif [[ "$DNS_PROVIDER" == "route53" ]]; then
+            [[ -n "$DNS_API_KEY" ]] && export AWS_ACCESS_KEY_ID="$DNS_API_KEY"
+            [[ -n "$DNS_API_SECRET" ]] && export AWS_SECRET_ACCESS_KEY="$DNS_API_SECRET"
+            ACME_CMD="$ACME_DIR/acme.sh --server letsencrypt --issue -d $DOMAIN --dns dns_aws"
+            log_info "Using Route53 automatic DNS validation"
+        elif [[ "$DNS_PROVIDER" == "digitalocean" ]]; then
+            [[ -n "$DNS_API_KEY" ]] && export DO_API_KEY="$DNS_API_KEY"
+            ACME_CMD="$ACME_DIR/acme.sh --server letsencrypt --issue -d $DOMAIN --dns dns_dgon"
+            log_info "Using DigitalOcean automatic DNS validation"
+        else
+            ACME_CMD="$ACME_DIR/acme.sh --server letsencrypt --issue -d $DOMAIN --dns --yes-I-know-dns-manual-mode-enough-go-ahead-please"
+            log_info "Using DNS validation mode (manual TXT record)"
+        fi
+    else
+        ACME_CMD="$ACME_DIR/acme.sh --server letsencrypt --issue -d $DOMAIN -w $WEBROOT"
+        log_info "Using webroot mode with path: $WEBROOT"
+    fi
     
     if [[ "$STAGING" == "true" ]]; then
         ACME_CMD="$ACME_CMD --staging"
@@ -250,11 +375,24 @@ issue_certificate() {
         return 0
     fi
     
-    # Execute certificate issuance
-    if execute $ACME_CMD; then
+    # Execute certificate issuance with proper error handling
+    log_debug "Executing: $ACME_CMD"
+    
+    if execute bash -c "$ACME_CMD"; then
         log_info "Certificate issued successfully"
+        
+        # Verify certificate was actually created
+        if [[ ! -f "$ACME_DIR/$DOMAIN/fullchain.cer" ]]; then
+            log_error "Certificate issuance reported success but files not found"
+            exit 1
+        fi
     else
-        log_error "Certificate issuance failed"
+        local exit_code=$?
+        log_error "Certificate issuance failed with exit code $exit_code"
+        
+        # Show debug information
+        log_info "For troubleshooting, run with --debug:"
+        log_info "$ACME_DIR/acme.sh --issue -d $DOMAIN --debug"
         exit 1
     fi
 }
@@ -330,6 +468,27 @@ show_renewal_info() {
     fi
 }
 
+# Cleanup function for failed SSL operations
+cleanup_ssl() {
+    log_warn "SSL setup failed, cleaning up..."
+    
+    # Remove failed certificate attempt
+    if [[ -d "$ACME_DIR/$DOMAIN" ]]; then
+        rm -rf "$ACME_DIR/$DOMAIN"
+        log_info "Removed failed certificate directory"
+    fi
+    
+    # Remove incomplete certificate files
+    [[ -f "$KEY_FILE" && ! -s "$KEY_FILE" ]] && rm -f "$KEY_FILE"
+    [[ -f "$CERT_FILE" && ! -s "$CERT_FILE" ]] && rm -f "$CERT_FILE"
+    
+    log_error "SSL setup failed and cleaned up"
+    exit 1
+}
+
+# Set up error trap
+trap cleanup_ssl ERR
+
 # Main process
 main() {
     log_info "Starting SSL certificate setup..."
@@ -341,11 +500,47 @@ main() {
     [[ "$STAGING" == "true" ]] && log_warn "Using staging environment"
     [[ "$DRY_RUN" == "true" ]] && log_warn "DRY RUN MODE - No changes will be made"
     
+    # Pre-flight checks
+    if [[ "$STANDALONE" == "true" ]]; then
+        # Check if port 80 is available for standalone mode
+        if ss -tlnp | grep -q ':80 '; then
+            log_error "Port 80 is already in use. Stop other services or use webroot mode"
+            exit 1
+        fi
+    fi
+    
+    if [[ "$DNS_MODE" == "true" && "$DNS_PROVIDER" != "manual" ]]; then
+        # Validate DNS API credentials are provided
+        case "$DNS_PROVIDER" in
+            cloudflare)
+                if [[ -z "$DNS_API_KEY" || -z "$DNS_EMAIL" ]]; then
+                    log_error "Cloudflare requires --dns-api-key and --dns-email"
+                    exit 1
+                fi
+                ;;
+            route53)
+                if [[ -z "$DNS_API_KEY" || -z "$DNS_API_SECRET" ]]; then
+                    log_error "Route53 requires --dns-api-key and --dns-api-secret"
+                    exit 1
+                fi
+                ;;
+            digitalocean)
+                if [[ -z "$DNS_API_KEY" ]]; then
+                    log_error "DigitalOcean requires --dns-api-key"
+                    exit 1
+                fi
+                ;;
+        esac
+    fi
+    
     install_acme
     issue_certificate
     install_certificate
     verify_certificate
     show_renewal_info
+    
+    # Disable error trap on success
+    trap - ERR
     
     log_info "SSL certificate setup completed successfully!"
 }
