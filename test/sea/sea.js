@@ -794,8 +794,8 @@ describe('SEA', function(){
     });
 
     it("User's nodes must be signed when on user scope!", function(done) {
-      /// https://github.com/amark/gun/issues/850
-      /// https://github.com/amark/gun/issues/616
+      /// https://github.com/akaoio/gun/issues/850
+      /// https://github.com/akaoio/gun/issues/616
       this.timeout(9000);
       var gun = Gun();
       var user = gun.user();

@@ -78,7 +78,7 @@ const HomeView = () => {
   <div class="main-view">
     <div class="centered-container public-messages-view">
       <h1>Hello, world!</h1>
-      <p>Here you can find sample applications and utilities for <a href="https://github.com/amark/gun">GUN</a>.</p>
+      <p>Here you can find sample applications and utilities for <a href="https://github.com/akaoio/gun">GUN</a>.</p>
       <p>If you need any help, please feel free to join the GUN community chat: <a href="http://chat.gun.eco">http://chat.gun.eco</a></p>
       <a href="/explorer" class="msg"><div class="msg-content">
         <b>Explorer</b>

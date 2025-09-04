@@ -218,7 +218,7 @@ describe("Load test "+ config.browsers +" browser(s) across "+ config.servers +"
 // Or still confused how a single 200 LOC test file
 // Is running correctness verification tests
 // across an entire distributed system of devices/browsers?
-// Well, jump on https://gitter.im/amark/gun !
+// Well, jump on https://gitter.im/akaoio/gun !
 
 // Think adding tests like this to your work place would be bomb awesome?
 // We totally sell PANIC training, licenses, and support!

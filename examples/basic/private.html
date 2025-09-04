@@ -77,7 +77,7 @@
 <script>
 
 // extend SEA functions to base64 encode encrypted data
-// workaround for https://github.com/amark/gun/issues/783
+// workaround for https://github.com/akaoio/gun/issues/783
 
 (() => {
   const _encrypt = SEA.encrypt;
@@ -93,7 +93,7 @@
 })();
 
 // override User functions to fix several issues
-// see https://github.com/amark/gun/issues/808
+// see https://github.com/akaoio/gun/issues/808
 
 SEA.Gun.User.prototype.grant = function grant(to, cb) {
   const gun  = this;       const user = gun.back(-1).user();
@@ -123,7 +123,7 @@ SEA.Gun.User.prototype.grant = function grant(to, cb) {
     enc      = await SEA.encrypt(sec,  dh);
 
     // if pub is not already in trust, first put an empty node
-    // workaround for https://github.com/amark/gun/issues/844
+    // workaround for https://github.com/akaoio/gun/issues/844
 
     if (!await user.get('trust').get(pub).then()) {
       await user.get('trust').get(pub).get(path).put({}).then();

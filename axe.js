@@ -95,7 +95,7 @@
 		}
 
 		if(last){ found(last); return }
-		try{ fetch(((loc.search||'').split('axe=')[1]||'').split('&')[0] || loc.axe || 'https://raw.githubusercontent.com/wiki/amark/gun/volunteer.dht.md').then(function(res){
+		try{ fetch(((loc.search||'').split('axe=')[1]||'').split('&')[0] || loc.axe || 'https://raw.githubusercontent.com/wiki/akaoio/gun/volunteer.dht.md').then(function(res){
 	  	return res.text()
 	  }).then(function(text){
 	  	found(lS.peers = text);

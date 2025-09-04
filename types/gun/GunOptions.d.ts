@@ -29,7 +29,7 @@ export type GunOptions =
 
       /**
        * allows you to pass options to a 3rd party module. Their project README will likely list the exposed options
-       * @see https://github.com/amark/gun/wiki/Modules
+       * @see https://github.com/akaoio/gun/wiki/Modules
        */
       [key: string]: any;
     }>

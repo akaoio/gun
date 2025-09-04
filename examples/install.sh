@@ -10,8 +10,8 @@
 # Copy paste and run each line into your terminal.
 # If you are on Windows, http://nodejs.org/download/ has
 # an installer that will automatically do it for you.
-# curl -o- https://raw.githubusercontent.com/amark/gun/master/examples/install.sh | bash
-# wget -O - https://raw.githubusercontent.com/amark/gun/master/examples/install.sh | bash
+# curl -o- https://raw.githubusercontent.com/akaoio/gun/master/examples/install.sh | bash
+# wget -O - https://raw.githubusercontent.com/akaoio/gun/master/examples/install.sh | bash
 
 #debian/ubuntu
 cd ~
@@ -34,7 +34,7 @@ git clone https://github.com/isaacs/nave.git
 #npm install gun@latest
 #cd ./node_modules/gun
 mkdir node_modules
-git clone https://github.com/amark/gun.git
+git clone https://github.com/akaoio/gun.git
 cd gun
 git checkout .
 git pull
