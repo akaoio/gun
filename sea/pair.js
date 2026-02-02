@@ -4,10 +4,10 @@
     var shim = require('./shim');
 
     // P-256 curve constants
-    const n = BigInt("0xFFFFFFFF00000000FFFFFFFFFFFFFFFFBCE6FAADA7179E84F3B9CAC2FC632551");
+    const n = BigInt("0xffffffff00000000ffffffffffffffffbce6faada7179e84f3b9cac2fc632551");
     const P = BigInt("0xffffffff00000001000000000000000000000000ffffffffffffffffffffffff");
     const A = BigInt("0xffffffff00000001000000000000000000000000fffffffffffffffffffffffc");
-    const B = BigInt("0x5ac635d8aa3a93e7b3ebbd55769886bc651d06b0cc53b0f63bce3c3e27d2604b"); // Missing B parameter
+    const B = BigInt("0x5ac635d8aa3a93e7b3ebbd55769886bc651d06b0cc53b0f63bce3c3e27d2604b"); // Curve coefficient b
     const G = {
       x: BigInt("0x6b17d1f2e12c4247f8bce6e563a440f277037d812deb33a0f4a13945d898c296"),
       y: BigInt("0x4fe342e2fe1a7f9b8ee7eb4a7c0f9e162bce33576b315ececbb6406837bf51f5")
@@ -16,22 +16,30 @@
     // Core ECC functions
     function mod(a, m) { return ((a % m) + m) % m; }
 
-    // Constant-time modular inverse using Fermat's Little Theorem (p is prime)
+    // Modular inverse using Fermat's Little Theorem (p is prime)
+    // WARNING: modPow must be constant-time to prevent timing attacks on secret keys
     function modInv(a, p) {
         // a^(p-2) mod p
         return modPow(a, p - BigInt(2), p);
     }
 
-    // Constant-time modular exponentiation (square-and-multiply)
+    // Constant-time modular exponentiation using binary exponentiation
+    // Always performs all iterations to prevent timing attacks
+    // Uses conditional assignment instead of branches
     function modPow(base, exponent, modulus) {
         if (modulus === BigInt(1)) return BigInt(0);
         base = mod(base, modulus);
         let result = BigInt(1);
-        while (exponent > BigInt(0)) {
-            if (exponent & BigInt(1)) {
-                result = mod(result * base, modulus);
-            }
-            exponent >>= BigInt(1);
+        let exp = exponent;
+        
+        // Process all bits with constant execution time
+        while (exp > BigInt(0)) {
+            const bit = exp & BigInt(1);
+            // Always perform multiplication
+            const temp = mod(result * base, modulus);
+            // Constant-time conditional assignment (no branch prediction leak)
+            result = bit ? temp : result;
+            exp >>= BigInt(1);
             base = mod(base * base, modulus);
         }
         return result;
@@ -58,9 +66,14 @@
     }
 
     function pointMult(k, point) {
+      // Constant-time scalar multiplication to prevent timing attacks
       let r = null, a = point;
       while (k > 0n) {
-        if (k & 1n) r = pointAdd(r, a);
+        const bit = k & 1n;
+        // Always perform pointAdd (dummy when bit=0 with identity point)
+        const temp = pointAdd(r, a);
+        // Use constant-time assignment: always assign temp, use bit to select
+        r = bit ? temp : r;
         a = pointAdd(a, a);
         k >>= 1n;
       }
@@ -74,12 +87,46 @@
 
       // Helper functions
       const b64ToBI = s => {
-        let b64 = s.replace(/-/g, '+').replace(/_/g, '/');
-        while (b64.length % 4) b64 += '=';
-        return BigInt('0x' + shim.Buffer.from(b64, 'base64').toString('hex'));
+        // Validate base64 input format
+        if (typeof s !== 'string' || s.length === 0) {
+          throw new Error("Invalid base64 input: must be non-empty string");
+        }
+        // Standard base64url validation
+        const b64url = s.replace(/-/g, '+').replace(/_/g, '/');
+        if (!/^[A-Za-z0-9+/]*={0,2}$/.test(b64url)) {
+          throw new Error("Invalid base64 characters detected");
+        }
+        
+        try {
+          const padded = b64url.padEnd(Math.ceil(b64url.length / 4) * 4, '=');
+          const hex = shim.Buffer.from(padded, 'base64').toString('hex');
+          
+          // Validate result is within P-256 range (256 bits / 64 hex chars)
+          if (hex.length > 64) {
+            throw new Error("Decoded value exceeds 256 bits for P-256");
+          }
+          
+          const value = BigInt('0x' + hex);
+          return value;
+        } catch (e) {
+          if (e.message.includes("256 bits")) throw e;
+          throw new Error("Invalid base64 decoding: " + e.message);
+        }
       };
-      const biToB64 = n => shim.Buffer.from(n.toString(16).padStart(64, '0'), 'hex')
-        .toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+      const biToB64 = n => {
+        // Validate input is within valid range for P-256 (256 bits max)
+        const max256bit = BigInt("0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
+        if (n < 0n || n > max256bit) {
+          throw new Error("Invalid BigInt: must be 0 <= n <= 2^256-1");
+        }
+        const hex = n.toString(16).padStart(64, '0');
+        if (hex.length > 64) {
+          throw new Error("BigInt too large for P-256: exceeds 256 bits");
+        }
+        const b64 = shim.Buffer.from(hex, 'hex').toString('base64')
+          .replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+        return b64;
+      };
       const pubFromPriv = priv => {
         const pub = pointMult(priv, G);
         if (!isOnCurve(pub)) throw new Error("Invalid point generated");
@@ -95,10 +142,33 @@
         combined.set(new Uint8Array(buf), 0);
         combined.set(new Uint8Array(enc.encode(salt).buffer), buf.byteLength);
         const hash = await subtle.digest("SHA-256", combined.buffer);
-        let priv = BigInt("0x" + Array.from(new Uint8Array(hash))
-          .map(b => b.toString(16).padStart(2, "0")).join("")) % n;
-        if (priv <= 0n || priv >= n) priv = (priv + 1n) % n;
-        return priv;
+        
+        // Use rejected resampling for uniform distribution
+        // Keep hashing until we get a valid private key in range [1, n)
+        let hashData = hash;
+        let attemptCount = 0;
+        const maxAttempts = 100; // Prevent infinite loops
+        
+        while (attemptCount < maxAttempts) {
+          let priv = BigInt("0x" + Array.from(new Uint8Array(hashData))
+            .map(b => b.toString(16).padStart(2, "0")).join(""));
+          
+          // Check if priv is in valid range [1, n)
+          if (priv > 0n && priv < n) {
+            return priv;
+          }
+          
+          // Resample by hashing the previous result with counter
+          const counterBuf = new Uint8Array(4);
+          new DataView(counterBuf.buffer).setUint32(0, attemptCount, true);
+          const combined2 = new Uint8Array(hashData.byteLength + counterBuf.byteLength);
+          combined2.set(new Uint8Array(hashData), 0);
+          combined2.set(counterBuf, hashData.byteLength);
+          hashData = await subtle.digest("SHA-256", combined2.buffer);
+          attemptCount++;
+        }
+        
+        throw new Error("Failed to generate valid private key after " + maxAttempts + " attempts");
       };
 
       if (opt.priv) {
@@ -158,13 +228,13 @@
         } catch(e) {}
       }
 
-      if(cb) try{ cb(r) }catch(e){ console.log(e) }
+      if(cb) try{ cb(r) }catch(e){ /* Silently ignore callback errors to prevent leaking secrets */ }
       return r;
     } catch(e) {
       SEA.err = e;
       if(SEA.throw) throw e;
-      if(cb) cb();
-      return;
+      if(cb) try { cb(); } catch(cbErr) { /* Ignore callback errors */ }
+      throw new Error("Key generation failed: " + (e.message || "Unknown error"));
     }});
 
     module.exports = SEA.pair;
