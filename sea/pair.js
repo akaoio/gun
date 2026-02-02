@@ -132,11 +132,42 @@
         if (!isOnCurve(pub)) throw new Error("Invalid point generated");
         return biToB64(pub.x) + '.' + biToB64(pub.y);
       };
+      const parsePub = pubStr => {
+        if (!pubStr || typeof pubStr !== 'string') {
+          throw new Error("Invalid pub format: must be string");
+        }
+        const parts = pubStr.split('.');
+        if (parts.length !== 2) {
+          throw new Error("Invalid pub format: must be x.y");
+        }
+        const point = { x: b64ToBI(parts[0]), y: b64ToBI(parts[1]) };
+        if (!isOnCurve(point)) {
+          throw new Error("Invalid public key: not on curve");
+        }
+        return point;
+      };
+      const pointToPub = point => {
+        if (!isOnCurve(point)) {
+          throw new Error("Invalid point: not on curve");
+        }
+        return biToB64(point.x) + '.' + biToB64(point.y);
+      };
+      const seedToBuffer = seed => {
+        const enc = new shim.TextEncoder();
+        if (typeof seed === 'string') {
+          return enc.encode(seed).buffer;
+        }
+        if (seed instanceof ArrayBuffer) {
+          return seed;
+        }
+        if (seed && seed.byteLength !== undefined) {
+          return seed.buffer || seed;
+        }
+        return null;
+      };
       const seedToKey = async (seed, salt) => {
         const enc = new shim.TextEncoder();
-        const buf = typeof seed === 'string' ? enc.encode(seed).buffer : 
-                   seed instanceof ArrayBuffer ? seed : 
-                   seed && seed.byteLength !== undefined ? (seed.buffer || seed) : null;
+        const buf = seedToBuffer(seed);
         if (!buf) throw new Error("Invalid seed");
         const combined = new Uint8Array(buf.byteLength + enc.encode(salt).buffer.byteLength);
         combined.set(new Uint8Array(buf), 0);
@@ -170,8 +201,67 @@
         
         throw new Error("Failed to generate valid private key after " + maxAttempts + " attempts");
       };
+      const hashToScalar = async (seed, label) => {
+        const enc = new shim.TextEncoder();
+        const buf = seedToBuffer(seed);
+        if (!buf) throw new Error("Invalid seed");
+        const labelBuf = enc.encode(label).buffer;
+        const combined = new Uint8Array(buf.byteLength + labelBuf.byteLength);
+        combined.set(new Uint8Array(labelBuf), 0);
+        combined.set(new Uint8Array(buf), labelBuf.byteLength);
+        const hash = await subtle.digest("SHA-256", combined.buffer);
 
-      if (opt.priv) {
+        let hashData = hash;
+        let attemptCount = 0;
+        const maxAttempts = 100;
+        while (attemptCount < maxAttempts) {
+          const scalar = BigInt("0x" + Array.from(new Uint8Array(hashData))
+            .map(b => b.toString(16).padStart(2, "0")).join(""));
+          if (scalar > 0n && scalar < n) {
+            return scalar;
+          }
+          const counterBuf = new Uint8Array(4);
+          new DataView(counterBuf.buffer).setUint32(0, attemptCount, true);
+          const combined2 = new Uint8Array(hashData.byteLength + counterBuf.byteLength);
+          combined2.set(new Uint8Array(hashData), 0);
+          combined2.set(counterBuf, hashData.byteLength);
+          hashData = await subtle.digest("SHA-256", combined2.buffer);
+          attemptCount++;
+        }
+        throw new Error("Failed to derive scalar after " + maxAttempts + " attempts");
+      };
+
+      if (opt.seed && (opt.priv || opt.epriv || opt.pub || opt.epub)) {
+        r = {};
+        if (opt.priv) {
+          const priv = b64ToBI(opt.priv);
+          const signOffset = await hashToScalar(opt.seed, "SEA.DERIVE|sign|");
+          const derivedPriv = mod(priv + signOffset, n);
+          const derivedPub = pointMult(derivedPriv, G);
+          r.priv = biToB64(derivedPriv);
+          r.pub = pointToPub(derivedPub);
+        }
+        if (opt.epriv) {
+          const epriv = b64ToBI(opt.epriv);
+          const encOffset = await hashToScalar(opt.seed, "SEA.DERIVE|encrypt|");
+          const derivedEpriv = mod(epriv + encOffset, n);
+          const derivedEpub = pointMult(derivedEpriv, G);
+          r.epriv = biToB64(derivedEpriv);
+          r.epub = pointToPub(derivedEpub);
+        }
+        if (opt.pub) {
+          const pubPoint = parsePub(opt.pub);
+          const signOffset = await hashToScalar(opt.seed, "SEA.DERIVE|sign|");
+          const derivedPub = pointAdd(pubPoint, pointMult(signOffset, G));
+          r.pub = pointToPub(derivedPub);
+        }
+        if (opt.epub) {
+          const epubPoint = parsePub(opt.epub);
+          const encOffset = await hashToScalar(opt.seed, "SEA.DERIVE|encrypt|");
+          const derivedEpub = pointAdd(epubPoint, pointMult(encOffset, G));
+          r.epub = pointToPub(derivedEpub);
+        }
+      } else if (opt.priv) {
         const priv = b64ToBI(opt.priv);
         r = { priv: opt.priv, pub: pubFromPriv(priv) };
         if (opt.epriv) {

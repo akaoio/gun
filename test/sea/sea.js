@@ -597,6 +597,77 @@ describe('SEA', function(){
     });
   });
 
+  describe('Derive (additive)', function() {
+    this.timeout(5000);
+
+    it('is deterministic for same priv + seed', async function () {
+      const base = await SEA.pair();
+      const seed = 'derive-determinism';
+      const derived1 = await SEA.pair(null, { priv: base.priv, seed });
+      const derived2 = await SEA.pair(null, { priv: base.priv, seed });
+
+      expect(derived1.priv).to.be(derived2.priv);
+      expect(derived1.pub).to.be(derived2.pub);
+    });
+
+    it('matches Bob/Alice derived pub (sign)', async function () {
+      const base = await SEA.pair();
+      const seed = 'derive-match-sign';
+
+      const bob = await SEA.pair(null, { priv: base.priv, seed });
+      const alice = await SEA.pair(null, { pub: base.pub, seed });
+
+      expect(bob.pub).to.be(alice.pub);
+    });
+
+    it('matches Bob/Alice derived epub (encrypt)', async function () {
+      const base = await SEA.pair();
+      const seed = 'derive-match-encrypt';
+
+      const bob = await SEA.pair(null, { epriv: base.epriv, seed });
+      const alice = await SEA.pair(null, { epub: base.epub, seed });
+
+      expect(bob.epub).to.be(alice.epub);
+    });
+
+    it('derives partial outputs based on inputs', async function () {
+      const base = await SEA.pair();
+      const seed = 'derive-partial';
+
+      const onlyPriv = await SEA.pair(null, { priv: base.priv, seed });
+      expect(onlyPriv.priv).to.be.ok();
+      expect(onlyPriv.pub).to.be.ok();
+      expect(onlyPriv.epriv).to.not.be.ok();
+      expect(onlyPriv.epub).to.not.be.ok();
+
+      const onlyPub = await SEA.pair(null, { pub: base.pub, seed });
+      expect(onlyPub.pub).to.be.ok();
+      expect(onlyPub.priv).to.not.be.ok();
+      expect(onlyPub.epriv).to.not.be.ok();
+      expect(onlyPub.epub).to.not.be.ok();
+    });
+
+    it('rejects invalid pub format', async function () {
+      let error;
+      try {
+        await SEA.pair(null, { pub: 'invalid', seed: 'derive-invalid-format' });
+      } catch (e) {
+        error = e;
+      }
+      expect(!!error).to.be(true);
+    });
+
+    it('rejects pub not on curve', async function () {
+      let error;
+      try {
+        await SEA.pair(null, { pub: 'AA.AA', seed: 'derive-off-curve' });
+      } catch (e) {
+        error = e;
+      }
+      expect(!!error).to.be(true);
+    });
+  });
+
   describe('User', function(){
     var gun = Gun(), gtmp;
 
