@@ -85,6 +85,14 @@ This trade-off is **required** so Alice can derive public keys from public keys.
 
 - `SEA.pair({ seed })`, `SEA.pair({ priv })`, `SEA.pair({ epriv })` keep existing behavior.
 - Derive only activates when `seed` is provided **with** `priv/epriv/pub/epub`.
+## Validation & Edge Cases
+
+The implementation includes hardened validation:
+- **Private key range:** Rejects `priv/epriv` if $\le 0$ or $\ge n$.
+- **Public key range:** Rejects `pub/epub` if $x \ge P$ or $y \ge P$ (non-canonical encoding).
+- **On-curve check:** All public keys validated via curve equation $y^2 = x^3 + ax + b \pmod{P}$.
+- **Zero-derived key retry:** If $derivedPriv = 0$ or $derivedPub = \infty$, automatically re-derives with counter suffix (`|0`, `|1`, ...) until valid. Alice and Bob converge on the same counter.
+
 ## Test Coverage (added)
 
 Main tests (in `test/sea/sea.js`):
@@ -92,3 +100,5 @@ Main tests (in `test/sea/sea.js`):
 - Alice/Bob consistency (sign + encrypt)
 - Partial outputs
 - Invalid pub format / point not on curve
+- Public key coordinates out of range
+- Private key out of range / zero

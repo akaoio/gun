@@ -390,16 +390,13 @@
     }
 
     function pointMult(k, point) {
-      // Constant-time scalar multiplication to prevent timing attacks
+      // Fixed-window scalar multiplication to reduce timing variance
       let r = null, a = point;
-      while (k > 0n) {
-        const bit = k & 1n;
-        // Always perform pointAdd (dummy when bit=0 with identity point)
+      for (let i = 0; i < 256; i++) {
+        const bit = (k >> BigInt(i)) & 1n;
         const temp = pointAdd(r, a);
-        // Use constant-time assignment: always assign temp, use bit to select
         r = bit ? temp : r;
         a = pointAdd(a, a);
-        k >>= 1n;
       }
       return r;
     }
@@ -451,7 +448,14 @@
           .replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
         return b64;
       };
+      const ensurePrivRange = (priv, name) => {
+        if (priv <= 0n || priv >= n) {
+          throw new Error((name || 'Private key') + " out of range");
+        }
+        return priv;
+      };
       const pubFromPriv = priv => {
+        ensurePrivRange(priv, 'Private key');
         const pub = pointMult(priv, G);
         if (!isOnCurve(pub)) throw new Error("Invalid point generated");
         return biToB64(pub.x) + '.' + biToB64(pub.y);
@@ -465,13 +469,16 @@
           throw new Error("Invalid pub format: must be x.y");
         }
         const point = { x: b64ToBI(parts[0]), y: b64ToBI(parts[1]) };
+        if (point.x >= P || point.y >= P) {
+          throw new Error("Invalid public key: out of range");
+        }
         if (!isOnCurve(point)) {
           throw new Error("Invalid public key: not on curve");
         }
         return point;
       };
       const pointToPub = point => {
-        if (!isOnCurve(point)) {
+        if (!point || !isOnCurve(point)) {
           throw new Error("Invalid point: not on curve");
         }
         return biToB64(point.x) + '.' + biToB64(point.y);
@@ -525,11 +532,12 @@
 
         throw new Error("Failed to generate valid private key after " + maxAttempts + " attempts");
       };
-      const hashToScalar = async (seed, label) => {
+      const hashToScalar = async (seed, label, counter) => {
         const enc = new shim.TextEncoder();
         const buf = seedToBuffer(seed);
         if (!buf) throw new Error("Invalid seed");
-        const labelBuf = enc.encode(label).buffer;
+        const labelStr = counter !== undefined && counter !== null ? label + counter : label;
+        const labelBuf = enc.encode(labelStr).buffer;
         const combined = new Uint8Array(buf.byteLength + labelBuf.byteLength);
         combined.set(new Uint8Array(labelBuf), 0);
         combined.set(new Uint8Array(buf), labelBuf.byteLength);
@@ -555,42 +563,65 @@
         throw new Error("Failed to derive scalar after " + maxAttempts + " attempts");
       };
 
+      const deriveScalar = async (seed, label, attempt) => {
+        return hashToScalar(seed, label, attempt === 0 ? null : attempt);
+      };
+      const derivePrivWithRetry = async (priv, label) => {
+        for (let attempt = 0; attempt < 100; attempt++) {
+          const offset = await deriveScalar(opt.seed, label, attempt);
+          const derivedPriv = mod(priv + offset, n);
+          if (derivedPriv !== 0n) {
+            return { derivedPriv, attempt };
+          }
+        }
+        throw new Error("Failed to derive non-zero private key");
+      };
+      const derivePubWithRetry = async (pubPoint, label) => {
+        for (let attempt = 0; attempt < 100; attempt++) {
+          const offset = await deriveScalar(opt.seed, label, attempt);
+          const derivedPub = pointAdd(pubPoint, pointMult(offset, G));
+          if (derivedPub) {
+            return derivedPub;
+          }
+        }
+        throw new Error("Failed to derive valid public key");
+      };
+
       if (opt.seed && (opt.priv || opt.epriv || opt.pub || opt.epub)) {
         r = {};
         if (opt.priv) {
-          const priv = b64ToBI(opt.priv);
-          const signOffset = await hashToScalar(opt.seed, "SEA.DERIVE|sign|");
-          const derivedPriv = mod(priv + signOffset, n);
+          const priv = ensurePrivRange(b64ToBI(opt.priv), 'Private key');
+          const signResult = await derivePrivWithRetry(priv, "SEA.DERIVE|sign|");
+          const derivedPriv = signResult.derivedPriv;
           const derivedPub = pointMult(derivedPriv, G);
           r.priv = biToB64(derivedPriv);
           r.pub = pointToPub(derivedPub);
         }
         if (opt.epriv) {
-          const epriv = b64ToBI(opt.epriv);
-          const encOffset = await hashToScalar(opt.seed, "SEA.DERIVE|encrypt|");
-          const derivedEpriv = mod(epriv + encOffset, n);
+          const epriv = ensurePrivRange(b64ToBI(opt.epriv), 'Encryption private key');
+          const encResult = await derivePrivWithRetry(epriv, "SEA.DERIVE|encrypt|");
+          const derivedEpriv = encResult.derivedPriv;
           const derivedEpub = pointMult(derivedEpriv, G);
           r.epriv = biToB64(derivedEpriv);
           r.epub = pointToPub(derivedEpub);
         }
         if (opt.pub) {
           const pubPoint = parsePub(opt.pub);
-          const signOffset = await hashToScalar(opt.seed, "SEA.DERIVE|sign|");
-          const derivedPub = pointAdd(pubPoint, pointMult(signOffset, G));
+          const derivedPub = await derivePubWithRetry(pubPoint, "SEA.DERIVE|sign|");
           r.pub = pointToPub(derivedPub);
         }
         if (opt.epub) {
           const epubPoint = parsePub(opt.epub);
-          const encOffset = await hashToScalar(opt.seed, "SEA.DERIVE|encrypt|");
-          const derivedEpub = pointAdd(epubPoint, pointMult(encOffset, G));
+          const derivedEpub = await derivePubWithRetry(epubPoint, "SEA.DERIVE|encrypt|");
           r.epub = pointToPub(derivedEpub);
         }
       } else if (opt.priv) {
-        const priv = b64ToBI(opt.priv);
+        const priv = ensurePrivRange(b64ToBI(opt.priv), 'Private key');
         r = { priv: opt.priv, pub: pubFromPriv(priv) };
         if (opt.epriv) {
+          const epriv = ensurePrivRange(b64ToBI(opt.epriv), 'Encryption private key');
           r.epriv = opt.epriv;
-          r.epub = pubFromPriv(b64ToBI(opt.epriv));
+          r.epub = pubFromPriv(epriv);
         } else {
           try {
             const dh = await ecdhSubtle.generateKey({name: 'ECDH', namedCurve: 'P-256'}, true, ['deriveKey'])
@@ -603,10 +634,12 @@
           } catch(e) {}
         }
       } else if (opt.epriv) {
-        r = { epriv: opt.epriv, epub: pubFromPriv(b64ToBI(opt.epriv)) };
+        const epriv = ensurePrivRange(b64ToBI(opt.epriv), 'Encryption private key');
+        r = { epriv: opt.epriv, epub: pubFromPriv(epriv) };
         if (opt.priv) {
+          const priv = ensurePrivRange(b64ToBI(opt.priv), 'Private key');
           r.priv = opt.priv;
-          r.pub = pubFromPriv(b64ToBI(opt.priv));
+          r.pub = pubFromPriv(priv);
         } else {
           const sa = await subtle.generateKey({name: 'ECDSA', namedCurve: 'P-256'}, true, ['sign', 'verify'])
           .then(async k => ({ 

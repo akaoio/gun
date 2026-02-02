@@ -599,6 +599,10 @@ describe('SEA', function(){
 
   describe('Derive (additive)', function() {
     this.timeout(5000);
+    const biToB64 = n => Buffer.from(n.toString(16).padStart(64, '0'), 'hex').toString('base64')
+      .replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+    const P = BigInt("0xffffffff00000001000000000000000000000000ffffffffffffffffffffffff");
+    const n = BigInt("0xffffffff00000000ffffffffffffffffbce6faada7179e84f3b9cac2fc632551");
 
     it('is deterministic for same priv + seed', async function () {
       const base = await SEA.pair();
@@ -661,6 +665,39 @@ describe('SEA', function(){
       let error;
       try {
         await SEA.pair(null, { pub: 'AA.AA', seed: 'derive-off-curve' });
+      } catch (e) {
+        error = e;
+      }
+      expect(!!error).to.be(true);
+    });
+
+    it('rejects pub coordinates out of range', async function () {
+      let error;
+      try {
+        const pub = biToB64(P) + '.' + biToB64(1n);
+        await SEA.pair(null, { pub, seed: 'derive-out-of-range' });
+      } catch (e) {
+        error = e;
+      }
+      expect(!!error).to.be(true);
+    });
+
+    it('rejects priv out of range', async function () {
+      let error;
+      try {
+        const priv = biToB64(n);
+        await SEA.pair(null, { priv, seed: 'derive-priv-out-of-range' });
+      } catch (e) {
+        error = e;
+      }
+      expect(!!error).to.be(true);
+    });
+
+    it('rejects zero priv', async function () {
+      let error;
+      try {
+        const priv = biToB64(0n);
+        await SEA.pair(null, { priv, seed: 'derive-priv-zero' });
       } catch (e) {
         error = e;
       }
