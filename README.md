@@ -99,6 +99,19 @@ gun.get('list').set({type: "cucumber", goal: "jumping cat"});
 
 Want to keep building more? **Jump to [THE DOCUMENTATION](#documentation)!**
 
+## ✨ New Advanced Features
+
+This fork includes **powerful enterprise-grade features** that significantly extend GUN's capabilities:
+
+- 🔑 **[Seed-Based Key Generation](./docs/seed-based-keys.md)** - Deterministic key pairs from passphrases for easy account recovery
+- 🌳 **[Additive Key Derivation](./docs/additive-derivation.md)** - Hierarchical deterministic (HD) wallets and privacy-enhanced identities  
+- 🔐 **[WebAuthn Integration](./docs/webauthn.md)** - Hardware security keys, Touch ID, Face ID, and passkey support
+- 🎯 **[External Authenticators](./docs/external-authenticators.md)** - Stateless operations with custom signing backends (HSM, KMS, etc.)
+
+**📖 [Read the complete documentation →](./docs/)**
+
+These features enable passwordless authentication, hardware-backed security, multi-device synchronization, and enterprise key management solutions.
+
 # About
 First & foremost, GUN is **a community of the nicest and most helpful people** out there. So [I want to invite you](http://chat.gun.eco) to come tell us about what **you** are working on & wanting to build (new or old school alike! Just be nice as well.) and ask us your questions directly. :)
 
@@ -180,6 +193,14 @@ The goal was to build a P2P database that could survive living inside **any** br
 Technically, **GUN is a graph synchronization protocol** with a *lightweight embedded engine*, capable of doing *[20M+ API ops/sec](https://gun.eco/docs/Performance)* in **just ~9KB gzipped size**.
 
 ## Documentation
+
+### 🚀 Advanced Features (This Fork)
+- **[Seed-Based Keys](./docs/seed-based-keys.md)** - Deterministic key generation
+- **[Additive Derivation](./docs/additive-derivation.md)** - HD wallets & key derivation  
+- **[WebAuthn Integration](./docs/webauthn.md)** - Hardware authenticators & biometrics
+- **[External Authenticators](./docs/external-authenticators.md)** - Custom signing & stateless auth
+
+### 📚 Core Documentation
 
 <table>
   <tr>
