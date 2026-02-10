@@ -1820,11 +1820,22 @@
       }
 
       // Localize some opt props, and delete the original refs to prevent possible attacks
-      const opt = (msg._.msg || {}).opt || {}
+      // NOTE: keep a per-message copy so nested puts can still use the authenticator.
+      const ctx = (msg._.msg || {}).opt || {}
+      const opt = msg._.sea || (function(){
+        var o = Object.assign({}, ctx);
+        try{
+          Object.defineProperty(msg._, 'sea', {value: o, enumerable: false, configurable: true, writable: true});
+        }catch(e){ msg._.sea = o }
+        return o;
+      }())
       const authenticator = opt.authenticator || (user._ || {}).sea;
       const upub = opt.authenticator ? (opt.pub || (user.is || {}).pub || pub) : (user.is || {}).pub;
       const cert = opt.cert;
-      delete opt.authenticator; delete opt.pub;
+      if (!msg._.done) {
+        delete ctx.authenticator; delete ctx.pub;
+        msg._.done = true;
+      }
       const raw = await S.parse(val) || {}
 
       if ('pub' === key && '~' + pub === soul) {

@@ -734,6 +734,35 @@ describe('SEA', function(){
       }, {opt: {authenticator: authenticator}})
     })()});
 
+    it("put to user graph deep with authenticator", function(done){(async function(){
+      var bob = await SEA.pair();
+      var encrypted = await SEA.encrypt('secret', bob);
+      gun.get(`~${bob.pub}`).get('a').get('b').put(encrypted, (ack) => {
+        gun.get(`~${bob.pub}`).get('a').get('b').once((data) => {
+          expect(ack.err).to.not.be.ok()
+          expect(data).to.be(encrypted)
+          done();
+        })
+      }, {opt: {authenticator: bob}})
+    })()});
+
+    it("does not leak authenticator on out", function(done){(async function(){
+      var g = Gun();
+      var bob = await SEA.pair();
+      g.on('out', function(msg){
+        if(msg.put){
+          var meta = msg._ || {};
+          expect(Object.prototype.propertyIsEnumerable.call(meta, 'sea')).to.be(false);
+          expect(((msg.opt||{}).authenticator)).to.not.be.ok();
+        }
+        this.to.next(msg);
+      });
+      g.get(`~${bob.pub}`).get('a').get('b').put('x', (ack) => {
+        expect(ack.err).to.not.be.ok();
+        done();
+      }, {opt: {authenticator: bob}})
+    })()});
+
     it('test', function(done){
       var g = Gun();
       user = g.user();
