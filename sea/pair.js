@@ -89,14 +89,12 @@
           throw new Error("Invalid base64 input: must be non-empty string");
         }
         // Standard base64url validation
-        const b64url = s.replace(/-/g, '+').replace(/_/g, '/');
-        if (!/^[A-Za-z0-9+/]*={0,2}$/.test(b64url)) {
+        if (!/^[A-Za-z0-9_-]*={0,2}$/.test(s)) {
           throw new Error("Invalid base64 characters detected");
         }
         
         try {
-          const padded = b64url.padEnd(Math.ceil(b64url.length / 4) * 4, '=');
-          const hex = shim.Buffer.from(padded, 'base64').toString('hex');
+          const hex = shim.Buffer.from(atob(s), 'binary').toString('hex');
           
           // Validate result is within P-256 range (256 bits / 64 hex chars)
           if (hex.length > 64) {

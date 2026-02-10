@@ -27,8 +27,7 @@
       try {
         // base64('base64(x):base64(y)') => shim.Buffer(xy)
         const pb = shim.Buffer.concat(
-          pub.replace(/-/g, '+').replace(/_/g, '/').split('.')
-          .map((t) => shim.Buffer.from(t, 'base64'))
+          pub.split('.').map((t) => shim.Buffer.from(atob(t), 'binary'))
         )
         // id is PGPv4 compliant raw key
         const id = shim.Buffer.concat([

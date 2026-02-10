@@ -99,6 +99,33 @@ describe('SEA', function(){
       });});});});});});});});
     })
 
+    it('work() base64url no slash', function(done){
+      this.timeout(60 * 1000);
+      (async function(){
+        function randStr(len){
+          var chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+          var out = '';
+          for(var i = 0; i < len; i++){
+            out += chars.charAt(Math.floor(Math.random() * chars.length));
+          }
+          return out;
+        }
+        function workAsync(data){
+          return new Promise(function(res){
+            SEA.work(data, null, function(r){ res(r) }, {name: 'SHA-256'});
+          });
+        }
+        for(var i = 0; i < 1000; i++){
+          var s = randStr(32);
+          var r = await workAsync(s);
+          if(r.indexOf('/') >= 0){
+            throw new Error('Found "/" in work() output at index '+i+': '+r+' (input: '+s+')');
+          }
+        }
+        done();
+      })().catch(function(err){ done(err || new Error('work() base64url test failed')); });
+    })
+
     it('types', function(done){
       var pair, s, v;
       SEA.pair(function(pair){
@@ -203,28 +230,29 @@ describe('SEA', function(){
 
     it('hash array buffer', function(done) {
       (async function() {
-        // Create a random ArrayBuffer (buffer 1)
+        // Create a deterministic ArrayBuffer (buffer 1)
         var buff1 = new ArrayBuffer(16);
         var view1 = new Uint8Array(buff1); // Use a Uint8Array to modify the buffer
         for (var i = 0; i < view1.length; i++) {
-          view1[i] = Math.floor(Math.random() * 256);
+          view1[i] = i;
         }
         var hash1 = await SEA.work(buff1, "salt");
-    
-        // Create another random ArrayBuffer (buffer 2)
+
+        // Create another deterministic ArrayBuffer (buffer 2)
         var buff2 = new ArrayBuffer(16);
         var view2 = new Uint8Array(buff2);
         for (var i = 0; i < view2.length; i++) {
-          view2[i] = Math.floor(Math.random() * 256);
+          view2[i] = i + 16;
         }
         var hash2 = await SEA.work(buff2, "salt");
-    
+
         // Ensure the hashes are strings and different from each other
-        expect(typeof hash1 === "string" && typeof hash2 === "string" && hash1 !== hash2).to.be(true);
+        expect(typeof hash1 === "string" && typeof hash2 === "string").to.be(true);
+        expect(hash1 !== hash2).to.be(true);
         done(); // Signal that the test is complete
       })();
     });
-    
+
     it('legacy', function(done){ (async function(){
       var pw = 'test123';
       // https://cdn.jsdelivr.net/npm/gun@0.9.99999/sea.js !
@@ -250,7 +278,7 @@ describe('SEA', function(){
         done();
       });
     }())});
-    
+
     it('legacy []', function(done){ (async function(){
       var pw = 'test123';
       // https://cdn.jsdelivr.net/npm/gun@0.9.99999/sea.js !

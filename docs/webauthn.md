@@ -34,14 +34,9 @@ WebAuthn requires:
 // Helper to encode/decode base64url
 const base64url = {
     encode: function(buffer) {
-        return btoa(String.fromCharCode(...new Uint8Array(buffer)))
-            .replace(/\+/g, '-')
-            .replace(/\//g, '_')
-            .replace(/=/g, '');
+        return btoa(String.fromCharCode(...new Uint8Array(buffer)));
     },
     decode: function(str) {
-        str = str.replace(/-/g, '+').replace(/_/g, '/');
-        while (str.length % 4) str += '=';
         return atob(str);
     }
 };

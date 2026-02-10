@@ -46,13 +46,32 @@
   })(USE, './https');
 
   ;USE(function(module){
-    var u;
-    if(u+''== typeof btoa){
-      if(u+'' == typeof Buffer){
-        try{ global.Buffer = USE("buffer", 1).Buffer }catch(e){ console.log("Please `npm install buffer` or add it to your package.json !") }
+    var u, root = (typeof globalThis !== "undefined") ? globalThis : (typeof global !== "undefined" ? global : (typeof window !== "undefined" ? window : this));
+    var nativeBtoa = (u+'' != typeof root.btoa) && root.btoa;
+    var nativeAtob = (u+'' != typeof root.atob) && root.atob;
+    if(u+'' == typeof Buffer){
+      if(u+'' != typeof require){
+        try{ root.Buffer = USE("buffer", 1).Buffer }catch(e){ console.log("Please `npm install buffer` or add it to your package.json !") }
       }
-      global.btoa = function(data){ return Buffer.from(data, "binary").toString("base64") };
-      global.atob = function(data){ return Buffer.from(data, "base64").toString("binary") };
+    }
+    if(u+'' != typeof Buffer){
+      root.btoa = function(data){ return Buffer.from(data, "binary").toString("base64").replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');};
+      root.atob = function(data){
+        var tmp = data.replace(/-/g, '+').replace(/_/g, '/')
+        while(tmp.length % 4){ tmp += '=' }
+        return Buffer.from(tmp, "base64").toString("binary");
+      };
+      return;
+    }
+    if(nativeBtoa){
+      root.btoa = function(data){ return nativeBtoa(data).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, ''); };
+    }
+    if(nativeAtob){
+      root.atob = function(data){
+        var tmp = data.replace(/-/g, '+').replace(/_/g, '/')
+        while(tmp.length % 4){ tmp += '=' }
+        return nativeAtob(tmp);
+      };
     }
   })(USE, './base64');
 
@@ -294,7 +313,8 @@
       }
       data = (typeof data == 'string') ? data : await shim.stringify(data);
       if('sha' === (opt.name||'').toLowerCase().slice(0,3)){
-        var rsha = shim.Buffer.from(await sha(data, opt.name), 'binary').toString(opt.encode || 'base64')
+        var rsha = shim.Buffer.from(await sha(data, opt.name), 'binary');
+        rsha = ('base64' === (opt.encode || 'base64'))? btoa(String.fromCharCode(...new Uint8Array(rsha))) : rsha.toString(opt.encode || 'base64');
         if(cb){ try{ cb(rsha) }catch(e){console.log(e)} }
         return rsha;
       }
@@ -309,7 +329,8 @@
         hash: opt.hash || S.pbkdf2.hash,
       }, key, opt.length || (S.pbkdf2.ks * 8))
       data = shim.random(data.length)  // Erase data in case of passphrase
-      var r = shim.Buffer.from(work, 'binary').toString(opt.encode || 'base64')
+      var r = shim.Buffer.from(work, 'binary');
+      r = ('base64' === (opt.encode || 'base64'))? btoa(String.fromCharCode(...new Uint8Array(r))) : r.toString(opt.encode || 'base64');
       if(cb){ try{ cb(r) }catch(e){console.log(e)} }
       return r;
     } catch(e) { 
@@ -413,14 +434,12 @@
           throw new Error("Invalid base64 input: must be non-empty string");
         }
         // Standard base64url validation
-        const b64url = s.replace(/-/g, '+').replace(/_/g, '/');
-        if (!/^[A-Za-z0-9+/]*={0,2}$/.test(b64url)) {
+        if (!/^[A-Za-z0-9_-]*={0,2}$/.test(s)) {
           throw new Error("Invalid base64 characters detected");
         }
 
         try {
-          const padded = b64url.padEnd(Math.ceil(b64url.length / 4) * 4, '=');
-          const hex = shim.Buffer.from(padded, 'base64').toString('hex');
+          const hex = shim.Buffer.from(atob(s), 'binary').toString('hex');
 
           // Validate result is within P-256 range (256 bits / 64 hex chars)
           if (hex.length > 64) {
@@ -1164,8 +1183,7 @@
       try {
         // base64('base64(x):base64(y)') => shim.Buffer(xy)
         const pb = shim.Buffer.concat(
-          pub.replace(/-/g, '+').replace(/_/g, '/').split('.')
-          .map((t) => shim.Buffer.from(t, 'base64'))
+          pub.split('.').map((t) => shim.Buffer.from(atob(t), 'binary'))
         )
         // id is PGPv4 compliant raw key
         const id = shim.Buffer.concat([
