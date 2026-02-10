@@ -126,6 +126,46 @@ describe('SEA', function(){
       })().catch(function(err){ done(err || new Error('work() base64url test failed')); });
     })
 
+    it('btoa/atob utf8 roundtrip', function(done){
+      (async function(){
+        var TextEnc = typeof TextEncoder !== 'undefined' ? TextEncoder : require('util').TextEncoder;
+        var TextDec = typeof TextDecoder !== 'undefined' ? TextDecoder : require('util').TextDecoder;
+        var enc = new TextEnc();
+        var dec = new TextDec('utf-8');
+
+        function toBinaryString(str){
+          var bytes = enc.encode(str);
+          var bin = '';
+          for(var i = 0; i < bytes.length; i++){
+            bin += String.fromCharCode(bytes[i]);
+          }
+          return bin;
+        }
+
+        function fromBinaryString(bin){
+          var bytes = new Uint8Array(bin.length);
+          for(var i = 0; i < bin.length; i++){
+            bytes[i] = bin.charCodeAt(i);
+          }
+          return dec.decode(bytes);
+        }
+
+        var samples = [
+          'Tiếng Việt có dấu: ắềôữ đặng',
+          '中文測試：漢字とかな',
+          'Emoji 😀🔥✨'
+        ];
+
+        samples.forEach(function(s){
+          var bin = toBinaryString(s);
+          var b64 = btoa(bin);
+          var round = fromBinaryString(atob(b64));
+          expect(round).to.be(s);
+        });
+        done();
+      })().catch(function(err){ done(err || new Error('btoa/atob utf8 test failed')); });
+    })
+
     it('types', function(done){
       var pair, s, v;
       SEA.pair(function(pair){

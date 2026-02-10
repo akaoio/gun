@@ -46,10 +46,17 @@
         SEA.work(pass, (act.auth = auth).s, act.d, act.enc); // the proof of work is evidence that we've spent some time/effort trying to log in, this slows brute force.
       }
       act.d = function(proof){
+        act.proof = proof;
         SEA.decrypt(act.auth.ek, proof, act.e, act.enc);
       }
       act.e = function(half){
         if(u === half){
+          if(!act.proofLegacyTried && act.proof){
+            act.proofLegacyTried = true;
+            var tmp = act.proof.replace(/-/g, '+').replace(/_/g, '/');
+            while(tmp.length % 4){ tmp += '=' }
+            return SEA.decrypt(act.auth.ek, tmp, act.e, act.enc);
+          }
           if(!act.enc){ // try old format
             act.enc = {encode: 'utf8'};
             return act.c(act.auth);
