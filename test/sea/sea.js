@@ -814,6 +814,30 @@ describe('SEA', function(){
       }, {opt: {authenticator: bob}})
     })()});
 
+    it("rejects hash mismatch inside user graph (~pub)", function(done){(async function(){
+      var bob = await SEA.pair();
+      gun.get(`~${bob.pub}`).get('payload#deadbeef').put('hello world', function(ack){
+        expect(ack.err).to.be.ok();
+        done();
+      }, {opt: {authenticator: bob}})
+    })()});
+
+    it("rejects hash mismatch at depth 2 under ~pub", function(done){(async function(){
+      var bob = await SEA.pair();
+      gun.get(`~${bob.pub}`).get('parent').get('payload#deadbeef').put('hello world', function(ack){
+        expect(ack.err).to.be.ok();
+        done();
+      }, {opt: {authenticator: bob}})
+    })()});
+
+    it("rejects hash mismatch at depth 3 under ~pub", function(done){(async function(){
+      var bob = await SEA.pair();
+      gun.get(`~${bob.pub}`).get('parent').get('child').get('payload#deadbeef').put('hello world', function(ack){
+        expect(ack.err).to.be.ok();
+        done();
+      }, {opt: {authenticator: bob}})
+    })()});
+
     it("does not leak authenticator on out", function(done){(async function(){
       var g = Gun();
       var bob = await SEA.pair();

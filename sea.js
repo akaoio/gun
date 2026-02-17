@@ -1774,7 +1774,7 @@
       eve.to.next(msg); // not handled
     }
     // Verify content-addressed data matches its hash
-    check.hash = function (eve, msg, val, key, soul, at, no) {
+    check.hash = function (eve, msg, val, key, soul, at, no, yes) {
       function base64ToHex(data) {
         var binaryStr = atob(data);
         var a = [];
@@ -1785,9 +1785,11 @@
         return a.join("");
       }
       var hash = key.split('#').pop();
+      yes = yes || function(){ eve.to.next(msg) };
+      if(!hash || hash === key){ return yes() }
       SEA.work(val, null, function (b64hash) {
         var hexhash = base64ToHex(b64hash), b64slice = b64hash.slice(-20), hexslice = hexhash.slice(-20);
-        if ([b64hash, b64slice, hexhash, hexslice].some(item => item.endsWith(hash))) return eve.to.next(msg);
+        if ([b64hash, b64slice, hexhash, hexslice].some(item => item.endsWith(hash))) return yes();
         no("Data hash not same as hash!");
       }, { name: 'SHA-256' });
     }
@@ -1862,6 +1864,23 @@
         msg._.done = true;
       }
       const raw = await S.parse(val) || {}
+      const hashed = 0 <= key.indexOf('#')
+      const $hash = function(data, next){
+        if(!hashed){ return next() }
+        check.hash(eve, msg, data, key, soul, at, no, next)
+      }
+      const $pass = function(data){
+        // check if cert ('+') and putter's pub ('*') exist
+        if (raw['+'] && raw['+']['m'] && raw['+']['s'] && raw['*']){
+          // now verify certificate
+          return verify(raw['+'], raw['*'], _ => {
+            msg.put['='] = data;
+            return eve.to.next(msg);
+          })
+        }
+        msg.put['='] = data;
+        return eve.to.next(msg);
+      }
 
       if ('pub' === key && '~' + pub === soul) {
         if (val === pub) return eve.to.next(msg) // the account MUST match `pub` property that equals the ID of the public key.
@@ -1880,25 +1899,28 @@
             msg.put[':'] = {':': tmp = SEA.opt.unpack(data.m), '~': data.s}
             msg.put['='] = tmp
 
-            // if writing to own graph, just allow it
-            if (pub === upub) {
-              if (tmp = link_is(val)) (at.sea.own[tmp] = at.sea.own[tmp] || {})[pub] = 1
-              next()
-              return
-            }
+            var sign = async function(){
+              // if writing to own graph, just allow it
+              if (pub === upub) {
+                if (tmp = link_is(val)) (at.sea.own[tmp] = at.sea.own[tmp] || {})[pub] = 1
+                next()
+                return
+              }
 
-            // if writing to other's graph, check if cert exists then try to inject cert into put, also inject self pub so that everyone can verify the put
-            if (pub !== upub && cert) {
-              const _cert = await S.parse(cert)
-              // even if cert exists, we must verify it
-              if (_cert && _cert.m && _cert.s)
-                verify(_cert, upub, _ => {
-                  msg.put[':']['+'] = _cert // '+' is a certificate
-                  msg.put[':']['*'] = upub // '*' is pub of the user who puts
-                  next()
-                  return
-                })
+              // if writing to other's graph, check if cert exists then try to inject cert into put, also inject self pub so that everyone can verify the put
+              if (pub !== upub && cert) {
+                const _cert = await S.parse(cert)
+                // even if cert exists, we must verify it
+                if (_cert && _cert.m && _cert.s)
+                  verify(_cert, upub, _ => {
+                    msg.put[':']['+'] = _cert // '+' is a certificate
+                    msg.put[':']['*'] = upub // '*' is pub of the user who puts
+                    next()
+                    return
+                  })
+              }
             }
+            $hash(tmp, sign)
           }, {raw: 1})
         })
         return;
@@ -1910,17 +1932,7 @@
           if (u === data) return no("Unverified data.") // make sure the signature matches the account it claims to be on. // reject any updates that are signed with a mismatched account.
           if ((tmp = link_is(data)) && pub === SEA.opt.pub(tmp)) (at.sea.own[tmp] = at.sea.own[tmp] || {})[pub] = 1
 
-          // check if cert ('+') and putter's pub ('*') exist
-          if (raw['+'] && raw['+']['m'] && raw['+']['s'] && raw['*'])
-            // now verify certificate
-            verify(raw['+'], raw['*'], _ => {
-              msg.put['='] = data;
-              return eve.to.next(msg);
-            })
-          else {
-            msg.put['='] = data;
-            return eve.to.next(msg);
-          }
+          $hash(data, function(){ $pass(data) })
         });
       })
       return
