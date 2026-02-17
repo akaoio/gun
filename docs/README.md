@@ -13,6 +13,10 @@ This fork includes several major enhancements to GunDB's Security, Encryption, a
 
 These features work together to provide enterprise-grade security, enhanced privacy, and modern authentication options.
 
+### Protocol & Architecture Drafts
+
+5. **[Hashgraph Layer on GunDB (Draft)](./hashgraph-layer.md)** - Event DAG, voting/finality, and execution bridge design
+
 ---
 
 ## 📚 Feature Documentation
@@ -151,6 +155,21 @@ gun.get(`~${pub}`).get('data').put('value', null, {
 - Multi-identity per operation
 - Custom signing backends
 - Full certificate support
+
+---
+
+### 5. Hashgraph Layer on GunDB (Draft)
+
+**Design sketch for a Hashgraph-inspired consensus/event layer on top of GunDB**
+
+Focus areas:
+- `!hg/...` protocol namespace layout
+- SEA-compatible symbolic key conventions
+- Event DAG model and canonical hashing/signing
+- Validator voting and finality checkpoints
+- Future deterministic execution bridge
+
+📖 **[Read full documentation →](./hashgraph-layer.md)**
 
 ---
 
