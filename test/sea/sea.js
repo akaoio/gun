@@ -1219,6 +1219,48 @@ describe('SEA', function(){
       })
     }())});
 
+    it('Certify: Deep content addressing write', function(done){(async function(){
+      var alice = await SEA.pair()
+      var bob = await SEA.pair()
+      var cert = await SEA.certify(bob, {"*": "private"}, alice)
+
+      var data = Gun.state().toString(36)
+      var fullHash = await SEA.work(data, null, null, {name: 'SHA-256'})
+      var hash = fullHash.slice(-20)
+
+      gun.get("~" + alice.pub)
+        .get("private")
+        .get("thread")
+        .get("message#" + hash)
+        .put(data, ack => {
+          expect(ack.err).to.not.be.ok()
+          gun.get("~" + alice.pub)
+            .get("private")
+            .get("thread")
+            .get("message#" + hash)
+            .once(_data => {
+              expect(_data).to.be(data)
+              done()
+            })
+        }, { opt: { cert, authenticator: bob } })
+    }())})
+
+    it('Certify: Deep content addressing reject mismatch', function(done){(async function(){
+      var alice = await SEA.pair()
+      var bob = await SEA.pair()
+      var cert = await SEA.certify(bob, {"*": "private"}, alice)
+      var data = Gun.state().toString(36)
+
+      gun.get("~" + alice.pub)
+        .get("private")
+        .get("thread")
+        .get("message#deadbeef")
+        .put(data, ack => {
+          expect(ack.err).to.be.ok()
+          done()
+        }, { opt: { cert, authenticator: bob } })
+    }())})
+
     it('Certify: Expiry', function(done){(async function(){
       var alice = await SEA.pair()
       var bob = await SEA.pair()
