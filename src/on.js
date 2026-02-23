@@ -61,15 +61,21 @@ Gun.chain.once = function(cb, opt){ opt = opt || {}; // avoid rewriting
 		var $ = this, at = $._, one = (at.one||(at.one={}));
 		if(eve.stun){ return } if('' === one[id]){ return }
 		if(true === (tmp = Gun.valid(data))){ once(); return }
-		if('string' == typeof tmp){ // soul reference: navigate to the linked node
-		clearTimeout((cat.one||'')[id]);
-		clearTimeout(one[id]); one[id] = '';
-		if(cat.soul || cat.has){ eve.off() }
+		if('string' == typeof tmp){ // soul reference
 		var sl = tmp.lastIndexOf('/');
 		if(sl > 0){
-			root.$.get(tmp.slice(0,sl)).get(tmp.slice(sl+1)).once(function(d){ cb.call($, d, key) });
-		} else {
-			root.$.get(tmp).once(function(d){ cb.call($, d, key) });
+			var leaf_key = tmp.slice(sl+1);
+			var parent_put = (root.$.get(tmp.slice(0,sl))._||'').put;
+			if(parent_put !== u){
+				var leaf_val = parent_put[leaf_key];
+				if(leaf_val !== u && true === Gun.valid(leaf_val)){
+					clearTimeout((cat.one||'')[id]);
+					clearTimeout(one[id]); one[id] = '';
+					if(cat.soul || cat.has){ eve.off() }
+					cb.call($, leaf_val, key);
+					return
+				}
+			}
 		}
 		return
 	}
