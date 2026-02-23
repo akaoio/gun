@@ -8479,5 +8479,21 @@ describe('Gun', function(){
 				});
 			});
 		});
+		it('.on() subscription resolves primitive via slash-path link', function(done){
+			var g = Gun();
+			var scope = g.get('aOn').get('bOn');
+			scope.put('world', function(ack){
+				expect(ack.err).to.not.be.ok();
+				g.get('linkOn').get('testOn').put(scope, function(ack2){
+					expect(ack2.err).to.not.be.ok();
+					g.get('linkOn').get('testOn').on(function(v){
+						if(v === undefined){ return }
+						expect(v).to.be('world');
+						this.off();
+						done();
+					});
+				});
+			});
+		});
 	});
 });
