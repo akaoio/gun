@@ -102,7 +102,7 @@ function input(msg, cat){ cat = cat || this.as; // TODO: V8 may not be able to o
 	if(u !== msg.put && (u === tmp['#'] || u === tmp['.'] || (u === tmp[':'] && u === tmp['=']) || u === tmp['>'])){ // convert from old format
 		if(!valid(tmp)){
 			if(!(soul = ((tmp||'')._||'')['#'])){ console.log("chain not yet supported for", tmp, '...', msg, cat); return; }
-			gun = cat.root.$.get(soul);
+			gun = sget(cat.root, soul);
 			return setTimeout.each(Object.keys(tmp).sort(), function(k){ // TODO: .keys( is slow // BUG? ?Some re-in logic may depend on this being sync?
 				if('_' == k || u === (state = state_is(tmp, k))){ return }
 				cat.on('in', {$: gun, put: {'#': soul, '.': k, '=': tmp[k], '>': state}, VIA: msg});
@@ -128,9 +128,9 @@ function input(msg, cat){ cat = cat || this.as; // TODO: V8 may not be able to o
 	unlink(msg, cat);
 
 	if(((cat.soul/* && (cat.ask||'')['']*/) || msg.$$) && state >= state_is(root.graph[soul], key)){ // The root has an in-memory cache of the graph, but if our peer has asked for the data then we want a per deduplicated chain copy of the data that might have local edits on it.
-		(tmp = root.$.get(soul)._).put = state_ify(tmp.put, key, state, change, soul);
+		(tmp = sget(root, soul)._).put = state_ify(tmp.put, key, state, change, soul);
 	}
-	if(!at.soul /*&& (at.ask||'')['']*/ && state >= state_is(root.graph[soul], key) && (sat = (root.$.get(soul)._.next||'')[key])){ // Same as above here, but for other types of chains. // TODO: Improve perf by preventing echoes recaching.
+	if(!at.soul /*&& (at.ask||'')['']*/ && state >= state_is(root.graph[soul], key) && (sat = (sget(root, soul)._.next||'')[key])){ // Same as above here, but for other types of chains. // TODO: Improve perf by preventing echoes recaching.
 		sat.put = change; // update cache
 		if('string' == typeof (tmp = valid(change))){
 			sat.put = root.$.get(tmp)._.put || change; // share same cache as what we're linked to.
@@ -249,5 +249,6 @@ function ack(msg, ev){
 }
 
 var empty = {}, u, text_rand = String.random, valid = Gun.valid, obj_has = function(o, k){ return o && Object.prototype.hasOwnProperty.call(o, k) }, state = Gun.state, state_is = state.is, state_ify = state.ify;
+function sget(root, soul){ root._sl = 1; var g = root.$.get(soul); root._sl = 0; return g }
 	
 }());

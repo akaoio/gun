@@ -910,7 +910,7 @@
 			if(u !== msg.put && (u === tmp['#'] || u === tmp['.'] || (u === tmp[':'] && u === tmp['=']) || u === tmp['>'])){ // convert from old format
 				if(!valid(tmp)){
 					if(!(soul = ((tmp||'')._||'')['#'])){ console.log("chain not yet supported for", tmp, '...', msg, cat); return; }
-					gun = cat.root.$.get(soul);
+					gun = sget(cat.root, soul);
 					return setTimeout.each(Object.keys(tmp).sort(), function(k){ // TODO: .keys( is slow // BUG? ?Some re-in logic may depend on this being sync?
 						if('_' == k || u === (state = state_is(tmp, k))){ return }
 						cat.on('in', {$: gun, put: {'#': soul, '.': k, '=': tmp[k], '>': state}, VIA: msg});
@@ -936,9 +936,9 @@
 			unlink(msg, cat);
 
 			if(((cat.soul/* && (cat.ask||'')['']*/) || msg.$$) && state >= state_is(root.graph[soul], key)){ // The root has an in-memory cache of the graph, but if our peer has asked for the data then we want a per deduplicated chain copy of the data that might have local edits on it.
-				(tmp = root.$.get(soul)._).put = state_ify(tmp.put, key, state, change, soul);
+				(tmp = sget(root, soul)._).put = state_ify(tmp.put, key, state, change, soul);
 			}
-			if(!at.soul /*&& (at.ask||'')['']*/ && state >= state_is(root.graph[soul], key) && (sat = (root.$.get(soul)._.next||'')[key])){ // Same as above here, but for other types of chains. // TODO: Improve perf by preventing echoes recaching.
+			if(!at.soul /*&& (at.ask||'')['']*/ && state >= state_is(root.graph[soul], key) && (sat = (sget(root, soul)._.next||'')[key])){ // Same as above here, but for other types of chains. // TODO: Improve perf by preventing echoes recaching.
 				sat.put = change; // update cache
 				if('string' == typeof (tmp = valid(change))){
 					sat.put = root.$.get(tmp)._.put || change; // share same cache as what we're linked to.
@@ -1057,6 +1057,7 @@
 		}
 
 		var empty = {}, u, text_rand = String.random, valid = Gun.valid, obj_has = function(o, k){ return o && Object.prototype.hasOwnProperty.call(o, k) }, state = Gun.state, state_is = state.is, state_ify = state.ify;
+		function sget(root, soul){ root._sl = 1; var g = root.$.get(soul); root._sl = 0; return g }
 	})(USE, './chain');
 
 	;USE(function(module){
@@ -1071,6 +1072,11 @@
 				}
 				var back = this, cat = back._;
 				var next = cat.next || empty;
+				if(back === cat.root.$ && key.indexOf('/') >= 0 && !cat.root._sl && !cat.root.graph[key] && (next||{})[key.slice(0,key.indexOf('/'))]){
+					var parts = key.split('/'), i = 0, nav = back;
+					while(i < parts.length){ nav = nav.get(parts[i++]) }
+					return nav;
+				}
 				if(!(gun = next[key])){
 					gun = key && cache(key, back);
 				}
@@ -1462,24 +1468,7 @@
 				var $ = this, at = $._, one = (at.one||(at.one={}));
 				if(eve.stun){ return } if('' === one[id]){ return }
 				if(true === (tmp = Gun.valid(data))){ once(); return }
-				if('string' == typeof tmp){ // soul reference
-					var sl = tmp.lastIndexOf('/');
-					if(sl > 0){
-						var leaf_key = tmp.slice(sl+1);
-						var parent_put = (root.$.get(tmp.slice(0,sl))._||'').put;
-						if(parent_put !== u){
-							var leaf_val = parent_put[leaf_key];
-							if(leaf_val !== u && true === Gun.valid(leaf_val)){
-								clearTimeout((cat.one||'')[id]);
-								clearTimeout(one[id]); one[id] = '';
-								if(cat.soul || cat.has){ eve.off() }
-								cb.call($, leaf_val, key);
-								return
-							}
-						}
-					}
-					return
-				}
+				if('string' == typeof tmp){ return }
 				clearTimeout((cat.one||'')[id]); // clear "not found" since they only get set on cat.
 				clearTimeout(one[id]); one[id] = setTimeout(once, opt.wait||99); // TODO: Bug? This doesn't handle plural chains.
 				function once(f){
