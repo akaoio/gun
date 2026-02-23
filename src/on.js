@@ -61,7 +61,18 @@ Gun.chain.once = function(cb, opt){ opt = opt || {}; // avoid rewriting
 		var $ = this, at = $._, one = (at.one||(at.one={}));
 		if(eve.stun){ return } if('' === one[id]){ return }
 		if(true === (tmp = Gun.valid(data))){ once(); return }
-		if('string' == typeof tmp){ return } // TODO: BUG? Will this always load?
+		if('string' == typeof tmp){ // soul reference: navigate to the linked node
+		clearTimeout((cat.one||'')[id]);
+		clearTimeout(one[id]); one[id] = '';
+		if(cat.soul || cat.has){ eve.off() }
+		var sl = tmp.lastIndexOf('/');
+		if(sl > 0){
+			root.$.get(tmp.slice(0,sl)).get(tmp.slice(sl+1)).once(function(d){ cb.call($, d, key) });
+		} else {
+			root.$.get(tmp).once(function(d){ cb.call($, d, key) });
+		}
+		return
+	}
 		clearTimeout((cat.one||'')[id]); // clear "not found" since they only get set on cat.
 		clearTimeout(one[id]); one[id] = setTimeout(once, opt.wait||99); // TODO: Bug? This doesn't handle plural chains.
 		function once(f){
