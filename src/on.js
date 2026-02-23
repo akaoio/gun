@@ -62,23 +62,23 @@ Gun.chain.once = function(cb, opt){ opt = opt || {}; // avoid rewriting
 		if(eve.stun){ return } if('' === one[id]){ return }
 		if(true === (tmp = Gun.valid(data))){ once(); return }
 		if('string' == typeof tmp){ // soul reference
-		var sl = tmp.lastIndexOf('/');
-		if(sl > 0){
-			var leaf_key = tmp.slice(sl+1);
-			var parent_put = (root.$.get(tmp.slice(0,sl))._||'').put;
-			if(parent_put !== u){
-				var leaf_val = parent_put[leaf_key];
-				if(leaf_val !== u && true === Gun.valid(leaf_val)){
-					clearTimeout((cat.one||'')[id]);
-					clearTimeout(one[id]); one[id] = '';
-					if(cat.soul || cat.has){ eve.off() }
-					cb.call($, leaf_val, key);
-					return
+			var sl = tmp.lastIndexOf('/');
+			if(sl > 0){
+				var leaf_key = tmp.slice(sl+1);
+				var parent_put = (root.$.get(tmp.slice(0,sl))._||'').put;
+				if(parent_put !== u){
+					var leaf_val = parent_put[leaf_key];
+					if(leaf_val !== u && true === Gun.valid(leaf_val)){
+						clearTimeout((cat.one||'')[id]);
+						clearTimeout(one[id]); one[id] = '';
+						if(cat.soul || cat.has){ eve.off() }
+						cb.call($, leaf_val, key);
+						return
+					}
 				}
 			}
+			return
 		}
-		return
-	}
 		clearTimeout((cat.one||'')[id]); // clear "not found" since they only get set on cat.
 		clearTimeout(one[id]); one[id] = setTimeout(once, opt.wait||99); // TODO: Bug? This doesn't handle plural chains.
 		function once(f){
