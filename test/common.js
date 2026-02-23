@@ -8442,5 +8442,58 @@ describe('Gun', function(){
 				});
 			});
 		});
+		it('slash path resolves same chain as chained get', function(done){
+			var g = Gun();
+			var chain1 = g.get('p').get('q');
+			var chain2 = g.get('p/q');
+			expect(chain1).to.be(chain2);
+			done();
+		});
+		it('read through slash path returns primitive value', function(done){
+			var g = Gun();
+			g.get('x').get('y').put(42, function(ack){
+				g.get('x/y').once(function(v){
+					expect(v).to.be(42);
+					done();
+				});
+			});
+		});
+		it('three-level slash path resolves correctly', function(done){
+			var g = Gun();
+			g.get('deep').get('lvl2').get('lvl3').put('hello', function(ack){
+				g.get('deep/lvl2/lvl3').once(function(v){
+					expect(v).to.be('hello');
+					done();
+				});
+			});
+		});
+		it('link to primitive has-chain resolves via slash path', function(done){
+			var g = Gun();
+			var scope = g.get('a').get('b');
+			scope.put('hello', function(ack){
+				g.get('link').get('test').put(scope, function(ack2){
+					g.get('link').get('test').once(function(v){
+						expect(v).to.be('hello');
+						done();
+					});
+				});
+			});
+		});
+		it('.on() subscription resolves primitive via slash-path link', function(done){
+			var g = Gun();
+			var scope = g.get('aOn').get('bOn');
+			scope.put('world', function(ack){
+				expect(ack.err).to.not.be.ok();
+				g.get('linkOn').get('testOn').put(scope, function(ack2){
+					expect(ack2.err).to.not.be.ok();
+					g.get('linkOn').get('testOn').on(function(v){
+						if(v === undefined){ return }
+						expect(v).to.be('world');
+						this.off();
+						done();
+					});
+				});
+			});
+		});
 	});
 });

@@ -839,7 +839,7 @@
 					get['#'] = get['#'] || at.soul;
 					//root.graph[get['#']] = root.graph[get['#']] || {_:{'#':get['#'],'>':{}}};
 					msg['#'] || (msg['#'] = text_rand(9)); // A3120 ?
-					back = (root.$.get(get['#'])._);
+					back = (sget(root, get['#'])._);
 					if(!(get = get['.'])){ // soul
 						tmp = back.ask && back.ask['']; // check if we have already asked for the full node
 						(back.ask || (back.ask = {}))[''] = back; // add a flag that we are now.
@@ -910,7 +910,7 @@
 			if(u !== msg.put && (u === tmp['#'] || u === tmp['.'] || (u === tmp[':'] && u === tmp['=']) || u === tmp['>'])){ // convert from old format
 				if(!valid(tmp)){
 					if(!(soul = ((tmp||'')._||'')['#'])){ console.log("chain not yet supported for", tmp, '...', msg, cat); return; }
-					gun = cat.root.$.get(soul);
+					gun = sget(cat.root, soul);
 					return setTimeout.each(Object.keys(tmp).sort(), function(k){ // TODO: .keys( is slow // BUG? ?Some re-in logic may depend on this being sync?
 						if('_' == k || u === (state = state_is(tmp, k))){ return }
 						cat.on('in', {$: gun, put: {'#': soul, '.': k, '=': tmp[k], '>': state}, VIA: msg});
@@ -936,12 +936,12 @@
 			unlink(msg, cat);
 
 			if(((cat.soul/* && (cat.ask||'')['']*/) || msg.$$) && state >= state_is(root.graph[soul], key)){ // The root has an in-memory cache of the graph, but if our peer has asked for the data then we want a per deduplicated chain copy of the data that might have local edits on it.
-				(tmp = root.$.get(soul)._).put = state_ify(tmp.put, key, state, change, soul);
+				(tmp = sget(root, soul)._).put = state_ify(tmp.put, key, state, change, soul);
 			}
-			if(!at.soul /*&& (at.ask||'')['']*/ && state >= state_is(root.graph[soul], key) && (sat = (root.$.get(soul)._.next||'')[key])){ // Same as above here, but for other types of chains. // TODO: Improve perf by preventing echoes recaching.
+			if(!at.soul /*&& (at.ask||'')['']*/ && state >= state_is(root.graph[soul], key) && (sat = (sget(root, soul)._.next||'')[key])){ // Same as above here, but for other types of chains. // TODO: Improve perf by preventing echoes recaching.
 				sat.put = change; // update cache
 				if('string' == typeof (tmp = valid(change))){
-					sat.put = root.$.get(tmp)._.put || change; // share same cache as what we're linked to.
+					sat.put = sget(root, tmp)._.put || change; // share same cache as what we're linking to.
 				}
 			}
 
@@ -966,7 +966,7 @@
 			if(msg.$$ && this !== Gun.on){ return } // $$ means we came from a link, so we are at the wrong level, thus ignore it unless overruled manually by being called directly.
 			if(!msg.put || cat.soul){ return } // But you cannot overrule being linked to nothing, or trying to link a soul chain - that must never happen.
 			var put = msg.put||'', link = put['=']||put[':'], tmp;
-			var root = cat.root, tat = root.$.get(put['#']).get(put['.'])._;
+			var root = cat.root, tat = sget(root, put['#']).get(put['.'])._;
 			if('string' != typeof (link = valid(link))){
 				if(this === Gun.on){ (tat.echo || (tat.echo = {}))[cat.id] = cat } // allow some chain to explicitly force linking to simple data.
 				return; // by default do not link to data that is not a link.
@@ -978,7 +978,7 @@
 			(tat.echo||(tat.echo={}))[cat.id] = cat; // set ourself up for the echo! // TODO: BUG? Echo to self no longer causes problems? Confirm.
 
 			if(cat.has){ cat.link = link }
-			var sat = root.$.get(tat.link = link)._; // grab what we're linking to.
+			var sat = sget(root, tat.link = link)._; // grab what we're linking to.
 			(sat.echo || (sat.echo = {}))[tat.id] = tat; // link it.
 			var tmp = cat.ask||''; // ask the chain for what needs to be loaded next!
 			if(tmp[''] || cat.lex){ // we might need to load the whole thing // TODO: cat.lex probably has edge case bugs to it, need more test coverage.
@@ -1001,7 +1001,7 @@
 				if(msg['@'] && (u !== tmp.put || u !== cat.put)){ return } // a "not found" from other peers should not clear out data if we have already found it.
 				//if(cat.has && u === cat.put && !(root.pass||'')[cat.id]){ return } // if we are already unlinked, do not call again, unless edge case. // TODO: BUG! This line should be deleted for "unlink deeply nested".
 				if(link = cat.link || msg.linked){
-					delete (root.$.get(link)._.echo||'')[cat.id];
+					delete (sget(root, link)._.echo||'')[cat.id];
 				}
 				if(cat.has){ // TODO: Empty out links, maps, echos, acks/asks, etc.?
 					cat.link = null;
@@ -1011,7 +1011,7 @@
 				setTimeout.each(Object.keys(cat.next||''), function(get, sat){ // empty out all sub chains. // TODO: .keys( is slow // BUG? ?Some re-in logic may depend on this being sync? // TODO: BUG? This will trigger deeper put first, does put logic depend on nested order? // TODO: BUG! For map, this needs to be the isolated child, not all of them.
 					if(!(sat = cat.next[get])){ return }
 					//if(cat.has && u === sat.put && !(root.pass||'')[sat.id]){ return } // if we are already unlinked, do not call again, unless edge case. // TODO: BUG! This line should be deleted for "unlink deeply nested".
-					if(link){ delete (root.$.get(link).get(get)._.echo||'')[sat.id] }
+					if(link){ delete (sget(root, link).get(get)._.echo||'')[sat.id] }
 					sat.on('in', {get: get, put: u, $: sat.$}); // TODO: BUG? Add recursive seen check?
 				},0,99);
 				return;
@@ -1057,6 +1057,7 @@
 		}
 
 		var empty = {}, u, text_rand = String.random, valid = Gun.valid, obj_has = function(o, k){ return o && Object.prototype.hasOwnProperty.call(o, k) }, state = Gun.state, state_is = state.is, state_ify = state.ify;
+		function sget(root, soul){ root._sl = 1; var g = root.$.get(soul); root._sl = 0; return g }
 	})(USE, './chain');
 
 	;USE(function(module){
@@ -1071,6 +1072,18 @@
 				}
 				var back = this, cat = back._;
 				var next = cat.next || empty;
+				if(back === cat.root.$ && key.indexOf('/') >= 0 && !cat.root._sl && !cat.root.graph[key]){
+					var parts = key.split('/'), i = 0, cur = back._, ok = 1;
+					while(i < parts.length){
+						if(!((cur.next||{})[parts[i]])){ ok = 0; break }
+						cur = cur.next[parts[i++]].$._; 
+					}
+					if(ok){
+						var nav = back; i = 0;
+						while(i < parts.length){ nav = nav.get(parts[i++]) }
+						return nav;
+					}
+				}
 				if(!(gun = next[key])){
 					gun = key && cache(key, back);
 				}
@@ -1462,24 +1475,7 @@
 				var $ = this, at = $._, one = (at.one||(at.one={}));
 				if(eve.stun){ return } if('' === one[id]){ return }
 				if(true === (tmp = Gun.valid(data))){ once(); return }
-				if('string' == typeof tmp){ // soul reference
-					var sl = tmp.lastIndexOf('/');
-					if(sl > 0){
-						var leaf_key = tmp.slice(sl+1);
-						var parent_put = (root.$.get(tmp.slice(0,sl))._||'').put;
-						if(parent_put !== u){
-							var leaf_val = parent_put[leaf_key];
-							if(leaf_val !== u && true === Gun.valid(leaf_val)){
-								clearTimeout((cat.one||'')[id]);
-								clearTimeout(one[id]); one[id] = '';
-								if(cat.soul || cat.has){ eve.off() }
-								cb.call($, leaf_val, key);
-								return
-							}
-						}
-					}
-					return
-				}
+				if('string' == typeof tmp){ return }
 				clearTimeout((cat.one||'')[id]); // clear "not found" since they only get set on cat.
 				clearTimeout(one[id]); one[id] = setTimeout(once, opt.wait||99); // TODO: Bug? This doesn't handle plural chains.
 				function once(f){

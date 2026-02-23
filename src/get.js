@@ -11,6 +11,18 @@ Gun.chain.get = function(key, cb, as){
 		}
 		var back = this, cat = back._;
 		var next = cat.next || empty;
+		if(back === cat.root.$ && key.indexOf('/') >= 0 && !cat.root._sl && !cat.root.graph[key]){
+			var parts = key.split('/'), i = 0, cur = back._, ok = 1;
+			while(i < parts.length){
+				if(!((cur.next||{})[parts[i]])){ ok = 0; break }
+				cur = cur.next[parts[i++]].$._; 
+			}
+			if(ok){
+				var nav = back; i = 0;
+				while(i < parts.length){ nav = nav.get(parts[i++]) }
+				return nav;
+			}
+		}
 		if(!(gun = next[key])){
 			gun = key && cache(key, back);
 		}
