@@ -8426,4 +8426,21 @@ describe('Gun', function(){
 			}, 100);
 		});
 	});
+
+	describe('Node Links', function(){
+		it('put node link then read through link resolves in plain scope', function(done){
+			var g = Gun();
+			var target = g.get('target').get('12345');
+			target.put('hello world', function(ack){
+				expect(ack.err).to.not.be.ok();
+				g.get('plain').get('link').put(target, function(ack2){
+					expect(ack2.err).to.not.be.ok();
+					g.get('plain').get('link').once(function(data){
+						expect(data).to.be('hello world');
+						done();
+					});
+				});
+			});
+		});
+	});
 });
