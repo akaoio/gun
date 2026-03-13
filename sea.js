@@ -1838,7 +1838,7 @@
         return
       }
 
-      const next = () => {
+      const $next = () => {
         JSON.stringifyAsync(msg.put[':'], function(err,s){
           if(err){ return no(err || "Stringify error.") }
           msg.put[':'] = s;
@@ -1868,6 +1868,26 @@
       const $hash = function(data, next){
         if(!hashed){ return next() }
         check.hash(eve, msg, data, key, soul, at, no, next)
+      }
+      const $sign = async function(){
+        // if writing to own graph, just allow it
+        if (pub === upub) {
+          if (tmp = link_is(val)) (at.sea.own[tmp] = at.sea.own[tmp] || {})[pub] = 1
+          $next()
+          return
+        }
+
+        // if writing to other's graph, check if cert exists then try to inject cert into put, also inject self pub so that everyone can verify the put
+        if (pub !== upub && cert) {
+          const _cert = await S.parse(cert)
+          // even if cert exists, we must verify it
+          if (_cert && _cert.m && _cert.s) verify(_cert, upub, _ => {
+            msg.put[':']['+'] = _cert // '+' is a certificate
+            msg.put[':']['*'] = upub // '*' is pub of the user who puts
+            $next()
+            return
+          })
+        }
       }
       const $pass = function(data){
         // check if cert ('+') and putter's pub ('*') exist
@@ -1899,28 +1919,7 @@
             msg.put[':'] = {':': tmp = SEA.opt.unpack(data.m), '~': data.s}
             msg.put['='] = tmp
 
-            var sign = async function(){
-              // if writing to own graph, just allow it
-              if (pub === upub) {
-                if (tmp = link_is(val)) (at.sea.own[tmp] = at.sea.own[tmp] || {})[pub] = 1
-                next()
-                return
-              }
-
-              // if writing to other's graph, check if cert exists then try to inject cert into put, also inject self pub so that everyone can verify the put
-              if (pub !== upub && cert) {
-                const _cert = await S.parse(cert)
-                // even if cert exists, we must verify it
-                if (_cert && _cert.m && _cert.s)
-                  verify(_cert, upub, _ => {
-                    msg.put[':']['+'] = _cert // '+' is a certificate
-                    msg.put[':']['*'] = upub // '*' is pub of the user who puts
-                    next()
-                    return
-                  })
-              }
-            }
-            $hash(tmp, sign)
+            $hash(tmp, $sign)
           }, {raw: 1})
         })
         return;
