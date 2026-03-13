@@ -16,6 +16,7 @@ These features work together to provide enterprise-grade security, enhanced priv
 ### Protocol & Architecture Drafts
 
 5. **[Hashgraph Layer on GunDB (Draft)](./hashgraph-layer.md)** - Event DAG, voting/finality, and execution bridge design
+6. **[Tilde Shard Index](./tilde-shard.md)** - Sharded public-key index under the `~` namespace with SEA-enforced write rules
 
 ---
 
@@ -170,6 +171,29 @@ Focus areas:
 - Future deterministic execution bridge
 
 📖 **[Read full documentation →](./hashgraph-layer.md)**
+
+---
+
+### 6. Tilde Shard Index
+
+**Write-protected public-key index sharded under the `~/` namespace**
+
+SEA firewall rules that let anyone build a peer-discoverable index of public keys without any central authority:
+- Root node (`~`) and intermediate shard nodes must be exact links to their canonical child soul
+- Leaf nodes hold a signed scalar payload that must equal the reconstructed public key
+- Standard authenticator support: `SEA.pair` object or async signing function
+- Configurable via `check.$sh` — chunk size, max depth, pub length, etc.
+
+```javascript
+// Example: write a leaf for your own public key
+const pair = await SEA.pair();
+const chunk = check.$sh.cut;   // default 2
+const soul  = '~/' + pair.pub.slice(0, chunk);
+const key   = pair.pub.slice(chunk);
+gun.get(soul).get(key).put(pair.pub, null, { opt: { authenticator: pair } });
+```
+
+📖 **[Read full documentation →](./tilde-shard.md)**
 
 ---
 

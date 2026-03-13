@@ -107,6 +107,7 @@ This fork includes **powerful enterprise-grade features** that significantly ext
 - 🌳 **[Additive Key Derivation](./docs/additive-derivation.md)** - Hierarchical deterministic (HD) wallets and privacy-enhanced identities  
 - 🔐 **[WebAuthn Integration](./docs/webauthn.md)** - Hardware security keys, Touch ID, Face ID, and passkey support
 - 🎯 **[External Authenticators](./docs/external-authenticators.md)** - Stateless operations with custom signing backends (HSM, KMS, etc.)
+- 🗂️ **[Tilde Shard Index](./docs/tilde-shard.md)** - SEA-enforced write rules for a sharded public-key discovery index
 
 **📖 [Read the complete documentation →](./docs/)**
 
