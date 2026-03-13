@@ -814,6 +814,99 @@ describe('SEA', function(){
       }, {opt: {authenticator: bob}})
     })()});
 
+    it("accepts shard intermediate when link target matches child soul", function(done){
+      gun.get('~').get('ab').put({'#':'~/ab'}, function(ack){
+        expect(ack.err).to.not.be.ok();
+        done();
+      })
+    });
+
+    it("rejects shard intermediate when link target mismatches child soul", function(done){
+      gun.get('~').get('ab').put({'#':'~/zz'}, function(ack){
+        expect(ack.err).to.be.ok();
+        done();
+      })
+    });
+
+    it("rejects shard intermediate when value is not link", function(done){
+      gun.get('~').get('ab').put('no-link', function(ack){
+        expect(ack.err).to.be.ok();
+        done();
+      })
+    });
+
+    it("rejects shard write with invalid key length", function(done){
+      gun.get('~').get('abc').put({'#':'~/abc'}, function(ack){
+        expect(ack.err).to.be.ok();
+        done();
+      })
+    });
+
+    it("rejects shard write when depth exceeds limit", function(done){
+      var segs = Array(44).fill('ab');
+      var soul = '~/' + segs.join('/');
+      gun.get(soul).get('cd').put({'#': soul + '/cd'}, function(ack){
+        expect(ack.err).to.be.ok();
+        done();
+      })
+    });
+
+    it("rejects shard leaf when value is link", function(done){(async function(){
+      var bob = await SEA.pair();
+      var chunks = bob.pub.match(/.{1,2}/g) || [];
+      var key = chunks.pop();
+      var soul = chunks.length ? '~/' + chunks.join('/') : '~';
+      gun.get(soul).get(key).put({'#': soul + '/' + key}, function(ack){
+        expect(ack.err).to.be.ok();
+        done();
+      })
+    })()});
+
+    it("put to shard leaf with authenticator pair", function(done){(async function(){
+      var bob = await SEA.pair();
+      var chunks = bob.pub.match(/.{1,2}/g) || [];
+      var key = chunks.pop();
+      var soul = chunks.length ? '~/' + chunks.join('/') : '~';
+      gun.get(soul).get(key).put(bob.pub, function(ack){
+        expect(ack.err).to.not.be.ok();
+        gun.get(soul).get(key).once(function(data){
+          expect(data).to.be(bob.pub);
+          done();
+        })
+      }, {opt: {authenticator: bob}})
+    })()});
+
+    it("put to shard leaf with external authenticator", function(done){(async function(){
+      var bob = await SEA.pair();
+      var chunks = bob.pub.match(/.{1,2}/g) || [];
+      var key = chunks.pop();
+      var soul = chunks.length ? '~/' + chunks.join('/') : '~';
+      async function authenticator(data){
+        return SEA.sign(data, bob)
+      }
+      gun.get(soul).get(key).put(bob.pub, function(ack){
+        expect(ack.err).to.not.be.ok();
+        gun.get(soul).get(key).once(function(data){
+          expect(data).to.be(bob.pub);
+          done();
+        })
+      }, {opt: {authenticator: authenticator}})
+    })()});
+
+    it("rejects shard path with double slash", function(done){
+      gun.get('~/ab//cd').get('ef').put({'#':'~/ab//cd/ef'}, function(ack){
+        expect(ack.err).to.be.ok();
+        done();
+      })
+    });
+
+    it("rejects shard path with trailing slash", function(done){
+      gun.get('~/ab/cd/').get('ef').put({'#':'~/ab/cd//ef'}, function(ack){
+        expect(ack.err).to.be.ok();
+        done();
+      })
+    });
+
     it("rejects hash mismatch inside user graph (~pub)", function(done){(async function(){
       var bob = await SEA.pair();
       gun.get(`~${bob.pub}`).get('payload#deadbeef').put('hello world', function(ack){

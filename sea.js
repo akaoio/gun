@@ -1763,6 +1763,9 @@
       if('~@' === soul.slice(0,2)){ // special case for shared system data, the list of public keys for an alias.
         check.pubs(eve, msg, val, key, soul, at, no); return;
       }
+      if('~' === soul || '~/' === soul.slice(0,2)){
+        check.shard(eve, msg, val, key, soul, at, no, at.user||''); return;
+      }
       //if('~' === soul.slice(0,1) && 2 === (tmp = soul.slice(1)).split('.').length){ // special case, account data for a public key.
       if(tmp = SEA.opt.pub(soul)){ // special case, account data for a public key.
         check.pub(eve, msg, val, key, soul, at, no, at.user||'', tmp); return;
@@ -1803,71 +1806,179 @@
       if(key === link_is(val)){ return eve.to.next(msg) } // and the ID must be EXACTLY equal to its property
       no("Alias not same!"); // that way nobody can tamper with the list of public keys.
     };
-    check.pub = async function(eve, msg, val, key, soul, at, no, user, pub){ var tmp // Example: {_:#~asdf, hello:'world'~fdsa}}
-      const verify = (certificate, certificant, cb) => {
-        if (certificate.m && certificate.s && certificant && pub)
-          // now verify certificate
-          return SEA.verify(certificate, pub, data => { // check if "pub" (of the graph owner) really issued this cert
-            if (u !== data && u !== data.e && msg.put['>'] && msg.put['>'] > parseFloat(data.e)) return no("Certificate expired.") // certificate expired
-            // "data.c" = a list of certificants/certified users
-            // "data.w" = lex WRITE permission, in the future, there will be "data.r" which means lex READ permission
-            if (u !== data && data.c && data.w && (data.c === certificant || data.c.indexOf('*') > -1 || data.c.indexOf(certificant) > -1)) {
-              // ok, now "certificant" is in the "certificants" list, but is "path" allowed? Check path
-              let path = soul.indexOf('/') > -1 ? soul.replace(soul.substring(0, soul.indexOf('/') + 1), '') : ''
-              String.match = String.match || Gun.text.match
-              const w = Array.isArray(data.w) ? data.w : typeof data.w === 'object' || typeof data.w === 'string' ? [data.w] : []
-              for (const lex of w) {
-                if ((String.match(path, lex['#']) && String.match(key, lex['.'])) || (!lex['.'] && String.match(path, lex['#'])) || (!lex['#'] && String.match(key, lex['.'])) || String.match((path ? path + '/' + key : key), lex['#'] || lex)) {
-                  // is Certificant forced to present in Path
-                  if (lex['+'] && lex['+'].indexOf('*') > -1 && path && path.indexOf(certificant) == -1 && key.indexOf(certificant) == -1) return no(`Path "${path}" or key "${key}" must contain string "${certificant}".`)
-                  // path is allowed, but is there any WRITE block? Check it out
-                  if (data.wb && (typeof data.wb === 'string' || ((data.wb || {})['#']))) { // "data.wb" = path to the WRITE block
-                    var root = eve.as.root.$.back(-1)
-                    if (typeof data.wb === 'string' && '~' !== data.wb.slice(0, 1)) root = root.get('~' + pub)
-                    return root.get(data.wb).get(certificant).once(value => { // TODO: INTENT TO DEPRECATE.
-                      if (value && (value === 1 || value === true)) return no(`Certificant ${certificant} blocked.`)
-                      return cb(data)
-                    })
-                  }
-                  return cb(data)
-                }
-              }
-              return no("Certificate verification fail.")
-            }
-          })
-        return
+    check.$sh = {
+      pub: 87,
+      cut: 2,
+      min: 1,
+      root: '~',
+      pre: '~/',
+      bad: /[^0-9a-zA-Z._-]/
+    }
+    check.$sh.max = Math.ceil(check.$sh.pub / check.$sh.cut)
+    check.$seg = function(seg, short){
+      if('string' != typeof seg || !seg){ return }
+      if(short){
+        if(seg.length < check.$sh.min || seg.length > check.$sh.cut){ return }
+      } else {
+        if(seg.length !== check.$sh.cut){ return }
       }
-
-      const $next = () => {
-        JSON.stringifyAsync(msg.put[':'], function(err,s){
-          if(err){ return no(err || "Stringify error.") }
-          msg.put[':'] = s;
+      if(check.$sh.bad.test(seg)){ return }
+      return 1
+    }
+    check.$path = function(soul){
+      if(check.$sh.root === soul){ return [] }
+      if(check.$sh.pre !== (soul||'').slice(0,2)){ return }
+      if('/' === soul.slice(-1) || 0 <= soul.indexOf('//')){ return }
+      var path = soul.slice(2).split('/'), i = 0, seg;
+      for(i; i < path.length; i++){
+        seg = path[i];
+        if(!check.$seg(seg)){ return }
+      }
+      return path
+    }
+    check.$kid = function(soul, key){
+      if(check.$sh.root === soul){ return check.$sh.pre + key }
+      return soul + '/' + key
+    }
+    check.$pub = function(soul, key){
+      var path = check.$path(soul);
+      if(!path){ return }
+      return path.join('') + key
+    }
+    check.$leaf = function(soul, key){
+      var pub = check.$pub(soul, key);
+      if(!pub || pub.length !== check.$sh.pub){ return }
+      if(SEA.opt.pub('~' + pub) !== pub){ return }
+      return pub
+    }
+    check.$sea = function(msg, user, pub){
+      var ctx = (msg._.msg || {}).opt || {}
+      var opt = msg._.sea || (function(){
+        var o = Object.assign({}, ctx)
+        try{
+          Object.defineProperty(msg._, 'sea', {value: o, enumerable: false, configurable: true, writable: true})
+        }catch(e){ msg._.sea = o }
+        return o
+      }())
+      var authenticator = opt.authenticator || (user._ || {}).sea
+      var upub = opt.authenticator ? (opt.pub || (user.is || {}).pub || pub) : (user.is || {}).pub
+      if (!msg._.done) {
+        delete ctx.authenticator; delete ctx.pub
+        msg._.done = true
+      }
+      return {opt, authenticator, upub}
+    }
+    check.shard = function(eve, msg, val, key, soul, at, no, user){
+      var path = check.$path(soul), link = link_is(val), expected, leaf;
+      if(!path){ return no("Invalid shard soul path.") }
+      if(!check.$seg(key, 1)){ return no("Invalid shard key.") }
+      if((path.length + 1) > check.$sh.max){ return no("Invalid shard depth.") }
+      leaf = check.$leaf(soul, key)
+      if(leaf){
+        if(link){ return no("Shard leaf cannot be link.") }
+        return check.pub(eve, msg, val, key, soul, at, no, user, leaf, {want: leaf, nocert: 1, err: "Shard leaf payload must equal pub."})
+      }
+      if(link){
+        expected = check.$kid(soul, key)
+        if(link !== expected){ return no("Invalid shard link target.") }
+      } else {
+        return no("Shard intermediate value must be link.")
+      }
+      return eve.to.next(msg)
+    };
+    check.$vfy = function(eve, msg, key, soul, pub, no, certificate, certificant, cb){
+      if (!(certificate||'').m || !(certificate||'').s || !certificant || !pub) { return }
+      return SEA.verify(certificate, pub, data => { // check if "pub" (of the graph owner) really issued this cert
+        if (u !== data && u !== data.e && msg.put['>'] && msg.put['>'] > parseFloat(data.e)) return no("Certificate expired.") // certificate expired
+        // "data.c" = a list of certificants/certified users
+        // "data.w" = lex WRITE permission, in the future, there will be "data.r" which means lex READ permission
+        if (u !== data && data.c && data.w && (data.c === certificant || data.c.indexOf('*') > -1 || data.c.indexOf(certificant) > -1)) {
+          // ok, now "certificant" is in the "certificants" list, but is "path" allowed? Check path
+          var path = soul.indexOf('/') > -1 ? soul.replace(soul.substring(0, soul.indexOf('/') + 1), '') : ''
+          String.match = String.match || Gun.text.match
+          var w = Array.isArray(data.w) ? data.w : typeof data.w === 'object' || typeof data.w === 'string' ? [data.w] : []
+          for (const lex of w) {
+            if ((String.match(path, lex['#']) && String.match(key, lex['.'])) || (!lex['.'] && String.match(path, lex['#'])) || (!lex['#'] && String.match(key, lex['.'])) || String.match((path ? path + '/' + key : key), lex['#'] || lex)) {
+              // is Certificant forced to present in Path
+              if (lex['+'] && lex['+'].indexOf('*') > -1 && path && path.indexOf(certificant) == -1 && key.indexOf(certificant) == -1) return no(`Path "${path}" or key "${key}" must contain string "${certificant}".`)
+              // path is allowed, but is there any WRITE block? Check it out
+              if (data.wb && (typeof data.wb === 'string' || ((data.wb || {})['#']))) { // "data.wb" = path to the WRITE block
+                var root = eve.as.root.$.back(-1)
+                if (typeof data.wb === 'string' && '~' !== data.wb.slice(0, 1)) root = root.get('~' + pub)
+                return root.get(data.wb).get(certificant).once(value => { // TODO: INTENT TO DEPRECATE.
+                  if (value && (value === 1 || value === true)) return no(`Certificant ${certificant} blocked.`)
+                  return cb(data)
+                })
+              }
+              return cb(data)
+            }
+          }
+          return no("Certificate verification fail.")
+        }
+      })
+    }
+    check.next = function(eve, msg, no){
+      JSON.stringifyAsync(msg.put[':'], function(err,s){
+        if(err){ return no(err || "Stringify error.") }
+        msg.put[':'] = s;
+        return eve.to.next(msg);
+      })
+    }
+    check.guard = function(eve, msg, key, soul, at, no, data, next){
+      if(0 > key.indexOf('#')){ return next() }
+      check.hash(eve, msg, data, key, soul, at, no, next)
+    }
+    check.auth = function(msg, no, authenticator, done){
+      SEA.opt.pack(msg.put, packed => {
+        if (!authenticator) return no("Missing authenticator");
+        SEA.sign(packed, authenticator, async function(data) {
+          if (u === data) return no(SEA.err || 'Signature fail.')
+          if (!data.m || !data.s) return no('Invalid signature format')
+          var parsed = SEA.opt.unpack(data.m)
+          msg.put[':'] = {':': parsed, '~': data.s}
+          msg.put['='] = parsed
+          done(parsed)
+        }, {raw: 1})
+      })
+    }
+    check.$tag = async function(msg, cert, upub, verify, next){
+      const _cert = await S.parse(cert)
+      if (_cert && _cert.m && _cert.s) verify(_cert, upub, _ => {
+        msg.put[':']['+'] = _cert // '+' is a certificate
+        msg.put[':']['*'] = upub // '*' is pub of the user who puts
+        next()
+        return
+      })
+    }
+    check.pass = function(eve, msg, raw, data, verify){
+      if (raw['+'] && raw['+']['m'] && raw['+']['s'] && raw['*']){
+        return verify(raw['+'], raw['*'], _ => {
+          msg.put['='] = data;
           return eve.to.next(msg);
         })
       }
+      msg.put['='] = data;
+      return eve.to.next(msg);
+    }
+    check.pub = async function(eve, msg, val, key, soul, at, no, user, pub, conf){ var tmp // Example: {_:#~asdf, hello:'world'~fdsa}}
+      conf = conf || {}
+      const verify = (certificate, certificant, cb) => check.$vfy(eve, msg, key, soul, pub, no, certificate, certificant, cb)
+      const $next = () => check.next(eve, msg, no)
 
-      // Localize some opt props, and delete the original refs to prevent possible attacks
-      // NOTE: keep a per-message copy so nested puts can still use the authenticator.
-      const ctx = (msg._.msg || {}).opt || {}
-      const opt = msg._.sea || (function(){
-        var o = Object.assign({}, ctx);
-        try{
-          Object.defineProperty(msg._, 'sea', {value: o, enumerable: false, configurable: true, writable: true});
-        }catch(e){ msg._.sea = o }
-        return o;
-      }())
-      const authenticator = opt.authenticator || (user._ || {}).sea;
-      const upub = opt.authenticator ? (opt.pub || (user.is || {}).pub || pub) : (user.is || {}).pub;
-      const cert = opt.cert;
-      if (!msg._.done) {
-        delete ctx.authenticator; delete ctx.pub;
-        msg._.done = true;
+      // Localize auth options into message-private SEA context.
+      const sec = check.$sea(msg, user, pub)
+      const opt = sec.opt
+      const authenticator = sec.authenticator
+      const upub = sec.upub
+      const cert = conf.nocert ? u : opt.cert;
+      const $expect = function(data){
+        if(u === conf.want){ return 1 }
+        if(data === conf.want){ return 1 }
+        no(conf.err || "Unexpected payload.")
       }
       const raw = await S.parse(val) || {}
-      const hashed = 0 <= key.indexOf('#')
       const $hash = function(data, next){
-        if(!hashed){ return next() }
-        check.hash(eve, msg, data, key, soul, at, no, next)
+        check.guard(eve, msg, key, soul, at, no, data, next)
       }
       const $sign = async function(){
         // if writing to own graph, just allow it
@@ -1879,27 +1990,11 @@
 
         // if writing to other's graph, check if cert exists then try to inject cert into put, also inject self pub so that everyone can verify the put
         if (pub !== upub && cert) {
-          const _cert = await S.parse(cert)
-          // even if cert exists, we must verify it
-          if (_cert && _cert.m && _cert.s) verify(_cert, upub, _ => {
-            msg.put[':']['+'] = _cert // '+' is a certificate
-            msg.put[':']['*'] = upub // '*' is pub of the user who puts
-            $next()
-            return
-          })
+          return check.$tag(msg, cert, upub, verify, $next)
         }
       }
       const $pass = function(data){
-        // check if cert ('+') and putter's pub ('*') exist
-        if (raw['+'] && raw['+']['m'] && raw['+']['s'] && raw['*']){
-          // now verify certificate
-          return verify(raw['+'], raw['*'], _ => {
-            msg.put['='] = data;
-            return eve.to.next(msg);
-          })
-        }
-        msg.put['='] = data;
-        return eve.to.next(msg);
+        return check.pass(eve, msg, raw, data, verify)
       }
 
       if ('pub' === key && '~' + pub === soul) {
@@ -1908,19 +2003,9 @@
       }
 
       if ((user.is || authenticator) && upub && !raw['*'] && !raw['+'] && (pub === upub || (pub !== upub && cert))){
-        SEA.opt.pack(msg.put, packed => {
-          // Validate authenticator
-          if (!authenticator) return no("Missing authenticator");
-          SEA.sign(packed, authenticator, async function(data) {
-            if (u === data) return no(SEA.err || 'Signature fail.')
-            // Validate signature format
-            if (!data.m || !data.s) return no('Invalid signature format')
-
-            msg.put[':'] = {':': tmp = SEA.opt.unpack(data.m), '~': data.s}
-            msg.put['='] = tmp
-
-            $hash(tmp, $sign)
-          }, {raw: 1})
+        check.auth(msg, no, authenticator, function(data){
+          if(!$expect(data)){ return }
+          $hash(data, $sign)
         })
         return;
       }
@@ -1929,6 +2014,7 @@
         SEA.verify(packed, raw['*'] || pub, function(data){ var tmp;
           data = SEA.opt.unpack(data);
           if (u === data) return no("Unverified data.") // make sure the signature matches the account it claims to be on. // reject any updates that are signed with a mismatched account.
+          if(!$expect(data)){ return }
           if ((tmp = link_is(data)) && pub === SEA.opt.pub(tmp)) (at.sea.own[tmp] = at.sea.own[tmp] || {})[pub] = 1
 
           $hash(data, function(){ $pass(data) })
