@@ -162,23 +162,64 @@
       }
       return {opt, authenticator, upub}
     }
-    check.shard = function(eve, msg, val, key, soul, at, no, user){
-      var path = check.$path(soul), link = link_is(val), expected, leaf;
+    check.shard = async function(eve, msg, val, key, soul, at, no, user){
+      var path = check.$path(soul), link = link_is(val), expected, leaf, raw, claim;
       if(!path){ return no("Invalid shard soul path.") }
       if(!check.$seg(key, 1)){ return no("Invalid shard key.") }
       if((path.length + 1) > check.$sh.max){ return no("Invalid shard depth.") }
       leaf = check.$leaf(soul, key)
       if(leaf){
         if(link){ return no("Shard leaf cannot be link.") }
+        // Always sign fresh via check.pub — sig covers state, preventing pre-signed writes
         return check.pub(eve, msg, val, key, soul, at, no, user, leaf, {want: leaf, nocert: 1, err: "Shard leaf payload must equal pub."})
       }
-      if(link){
-        expected = check.$kid(soul, key)
+      // Intermediate
+      expected = check.$kid(soul, key)
+      var prefix = check.$pub(soul, key)
+      raw = link ? {} : ((await S.parse(val)) || {})
+      claim = (raw && typeof raw === 'object') ? raw['*'] : undefined
+      if(!claim){
+        // Fresh client write — authenticator required; SEA.opt.pack binds sig to Gun state
+        if(!link){ return no("Shard intermediate value must be link.") }
         if(link !== expected){ return no("Invalid shard link target.") }
-      } else {
-        return no("Shard intermediate value must be link.")
+        var sec = check.$sea(msg, user)
+        var authenticator = sec.authenticator
+        claim = sec.upub || ((authenticator||{}).pub)
+        if(!authenticator){ return no("Shard intermediate requires authenticator.") }
+        if('string' !== typeof claim || claim.length !== check.$sh.pub){ return no("Invalid shard intermediate pub.") }
+        if(SEA.opt.pub('~' + claim) !== claim){ return no("Invalid shard intermediate pub format.") }
+        if(0 !== claim.indexOf(prefix)){ return no("Shard pub prefix mismatch.") }
+        check.auth(msg, no, authenticator, function(data){
+          if(link_is(data) !== expected){ return no("Shard intermediate signed payload mismatch.") }
+          msg.put[':']['*'] = claim  // append fullPub to {':':link,'~':sig} set by check.auth
+          msg.put['='] = {'#': expected}
+          check.next(eve, msg, no)
+        })
+        return
       }
-      return eve.to.next(msg)
+      // Peer re-read: stored envelope {':': link, '~': sig, '*': fullPub}
+      // Skip if local graph already has a valid link for this slot — avoid redundant verify+write
+      var existing = ((at.graph||{})[soul]||{})[key]
+      if(existing){
+        var existingParsed = await S.parse(existing)
+        if(existingParsed && link_is(existingParsed[':']) === expected){
+          msg.put['='] = {'#': expected}
+          return eve.to.next(msg)
+        }
+      }
+      if('string' !== typeof claim || claim.length !== check.$sh.pub){ return no("Invalid shard intermediate pub.") }
+      if(SEA.opt.pub('~' + claim) !== claim){ return no("Invalid shard intermediate pub format.") }
+      if(0 !== claim.indexOf(prefix)){ return no("Shard pub prefix mismatch.") }
+      if(link_is(raw[':']) !== expected){ return no("Invalid shard link target.") }
+      SEA.opt.pack(msg.put, function(packed){
+        SEA.verify(packed, claim, function(data){
+          data = SEA.opt.unpack(data)
+          if(u === data){ return no("Invalid shard intermediate signature.") }
+          if(link_is(data) !== expected){ return no("Shard intermediate payload mismatch.") }
+          msg.put['='] = data
+          eve.to.next(msg)  // val already a JSON string — forward directly
+        })
+      })
     };
     check.$vfy = function(eve, msg, key, soul, pub, no, certificate, certificant, cb){
       if (!(certificate||'').m || !(certificate||'').s || !certificant || !pub) { return }

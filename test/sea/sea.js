@@ -814,19 +814,24 @@ describe('SEA', function(){
       }, {opt: {authenticator: bob}})
     })()});
 
-    it("accepts shard intermediate when link target matches child soul", function(done){
-      gun.get('~').get('ab').put({'#':'~/ab'}, function(ack){
+    it("accepts shard intermediate when link target matches child soul", function(done){(async function(){
+      var bob = await SEA.pair();
+      var key = bob.pub.slice(0, 2);
+      var expected = '~/' + key;
+      gun.get('~').get(key).put({'#': expected}, function(ack){
         expect(ack.err).to.not.be.ok();
         done();
-      })
-    });
+      }, {opt: {authenticator: bob}})
+    })()});
 
-    it("rejects shard intermediate when link target mismatches child soul", function(done){
-      gun.get('~').get('ab').put({'#':'~/zz'}, function(ack){
+    it("rejects shard intermediate when link target mismatches child soul", function(done){(async function(){
+      var bob = await SEA.pair();
+      var key = bob.pub.slice(0, 2);
+      gun.get('~').get(key).put({'#': '~/zz'}, function(ack){
         expect(ack.err).to.be.ok();
         done();
-      })
-    });
+      }, {opt: {authenticator: bob}})
+    })()});
 
     it("rejects shard intermediate when value is not link", function(done){
       gun.get('~').get('ab').put('no-link', function(ack){
@@ -834,6 +839,50 @@ describe('SEA', function(){
         done();
       })
     });
+
+    it("accepts shard intermediate with external async authenticator", function(done){(async function(){
+      var bob = await SEA.pair();
+      var key = bob.pub.slice(0, 2);
+      var expected = '~/' + key;
+      async function authenticator(data){ return SEA.sign(data, bob) }
+      gun.get('~').get(key).put({'#': expected}, function(ack){
+        expect(ack.err).to.not.be.ok();
+        done();
+      }, {opt: {authenticator: authenticator, pub: bob.pub}}) // function auth has no .pub — must pass opt.pub explicitly
+    })()});
+
+    it("rejects shard intermediate with function authenticator but missing opt.pub", function(done){(async function(){
+      var bob = await SEA.pair();
+      var key = bob.pub.slice(0, 2);
+      var expected = '~/' + key;
+      async function authenticator(data){ return SEA.sign(data, bob) }
+      gun.get('~').get(key).put({'#': expected}, function(ack){
+        expect(ack.err).to.be.ok(); // claim = undefined without opt.pub → "Invalid shard intermediate pub."
+        done();
+      }, {opt: {authenticator: authenticator}}) // no opt.pub → claim undefined
+    })()});
+
+    it("rejects shard intermediate without authenticator", function(done){(async function(){
+      var bob = await SEA.pair();
+      var key = bob.pub.slice(0, 2);
+      var expected = '~/' + key;
+      gun.get('~').get(key).put({'#': expected}, function(ack){
+        expect(ack.err).to.be.ok();
+        done();
+      }) // no opt.authenticator
+    })()});
+
+    it("rejects shard intermediate with wrong pub prefix", function(done){(async function(){
+      var bob = await SEA.pair();
+      var alice = await SEA.pair();
+      var key = bob.pub.slice(0, 2);
+      while(alice.pub.slice(0, 2) === key){ alice = await SEA.pair() }
+      var expected = '~/' + key;
+      gun.get('~').get(key).put({'#': expected}, function(ack){
+        expect(ack.err).to.be.ok(); // alice.pub doesn't start with key
+        done();
+      }, {opt: {authenticator: alice}})
+    })()});
 
     it("rejects shard write with invalid key length", function(done){
       gun.get('~').get('abc').put({'#':'~/abc'}, function(ack){
@@ -860,6 +909,18 @@ describe('SEA', function(){
         expect(ack.err).to.be.ok();
         done();
       })
+    })()});
+
+    it("rejects shard leaf with pre-signed proof and no authenticator", function(done){(async function(){
+      var bob = await SEA.pair();
+      var chunks = bob.pub.match(/.{1,2}/g) || [];
+      var key = chunks.pop();
+      var soul = chunks.length ? '~/' + chunks.join('/') : '~';
+      var proof = await SEA.sign(bob.pub, bob, null, {raw: 1});
+      gun.get(soul).get(key).put(bob.pub, function(ack){
+        expect(ack.err).to.be.ok(); // no authenticator — pre-signed proof rejected
+        done();
+      }, {opt: {proof: proof, pub: bob.pub}}) // opt.proof without authenticator
     })()});
 
     it("put to shard leaf with authenticator pair", function(done){(async function(){

@@ -180,17 +180,23 @@ Focus areas:
 
 SEA firewall rules that let anyone build a peer-discoverable index of public keys without any central authority:
 - Root node (`~`) and intermediate shard nodes must be exact links to their canonical child soul
+- **Intermediate writes require an `authenticator`** whose pub key starts with the path prefix — prevents spam; signature is bound to the Gun state timestamp via `SEA.opt.pack` so pre-signed writes are rejected
 - Leaf nodes hold a signed scalar payload that must equal the reconstructed public key
 - Standard authenticator support: `SEA.pair` object or async signing function
+- When using a function authenticator on an **intermediate** node, pass `opt.pub` explicitly (a function has no `.pub` property)
 - Configurable via `check.$sh` — chunk size, max depth, pub length, etc.
 
 ```javascript
-// Example: write a leaf for your own public key
+// Write a first-level intermediate node
 const pair = await SEA.pair();
-const chunk = check.$sh.cut;   // default 2
-const soul  = '~/' + pair.pub.slice(0, chunk);
-const key   = pair.pub.slice(chunk);
-gun.get(soul).get(key).put(pair.pub, null, { opt: { authenticator: pair } });
+const key = pair.pub.slice(0, 2);
+gun.get('~').get(key).put({'#': '~/' + key}, null, { opt: { authenticator: pair } });
+
+// Write the leaf for your own public key
+const chunks = pair.pub.match(/.{1,2}/g) || [];
+const leafKey = chunks.pop();
+const leafSoul = chunks.length ? '~/' + chunks.join('/') : '~';
+gun.get(leafSoul).get(leafKey).put(pair.pub, null, { opt: { authenticator: pair } });
 ```
 
 📖 **[Read full documentation →](./tilde-shard.md)**

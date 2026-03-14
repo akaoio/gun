@@ -196,6 +196,35 @@ gun.get(`~${bob.pub}`).get('messages').get('alice').put(
 - `pub`: Your public key (if authenticator is a function)
 - `cert`: Certificate from the graph owner
 
+## Writing Shard Intermediate Nodes (`~/...`)
+
+Intermediate nodes in the `~` shard namespace (`~/ab`, `~/ab/cd`, etc.) enforce their own strict rules. See [tilde-shard.md](./tilde-shard.md) for full details. Key points:
+
+- An `authenticator` is **always required** — no anonymous writes.
+- The authenticator's pub key **must start with** the key path prefix.
+- **Pair object authenticator** — `pub` is read from `authenticator.pub` automatically:
+
+```javascript
+const pair = await SEA.pair();
+const key = pair.pub.slice(0, 2);
+gun.get('~').get(key).put({'#': '~/' + key}, null, {
+  opt: { authenticator: pair }
+});
+```
+
+- **Function authenticator** — a function has no `.pub`. You **must** pass `opt.pub` explicitly:
+
+```javascript
+const pair = await SEA.pair();
+const auth = async (data) => SEA.sign(data, pair);
+const key = pair.pub.slice(0, 2);
+gun.get('~').get(key).put({'#': '~/' + key}, null, {
+  opt: { authenticator: auth, pub: pair.pub }  // opt.pub required
+});
+```
+
+Omitting `opt.pub` when using a function authenticator on an intermediate shard node results in `"Invalid shard intermediate pub."` even if the signature itself would be valid.
+
 ## Advanced Patterns
 
 ### Switch Identities Per Operation
