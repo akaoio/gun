@@ -584,7 +584,7 @@
 				var now = State(), u;
 				if(state > now){
 					if((tmp = state - now) > Ham.max){
-						msg.err = ctx.err = ERR+cut(key)+"on"+cut(soul)+"state too far in future."; ctx.stun = 0; ctx.acks = ctx.acks || 0; fire(ctx); back(ctx); return;
+						msg.err = ctx.err = ERR+cut(key)+"on"+cut(soul)+"state too far in future."; fire(ctx); back(ctx); return;
 					}
 					setTimeout(function(){ ham(val, key, soul, state, msg) }, tmp > MD? MD : tmp); // Max Defer 32bit. :(
 					console.STAT && console.STAT(((DBG||ctx).Hf = +new Date), tmp, 'future');
@@ -616,7 +616,7 @@
 			}
 			function fire(ctx, msg){ var root;
 				if(ctx.stop){ return }
-				if(!ctx.err && 0 < --ctx.stun){ return } // TODO: 'forget' feature in SEA tied to this, bad approach, but hacked in for now. Any changes here must update there.
+				if(0 < --ctx.stun && !ctx.err){ return } // decrement always runs; early-return only if stun still positive AND no error.
 				ctx.stop = 1;
 				if(!(root = ctx.root)){ return }
 				var tmp = ctx.match; tmp.end = 1;
@@ -648,7 +648,7 @@
 			}
 			function back(ctx){
 				if(!ctx || !ctx.root){ return }
-				if(ctx.stun || ctx.acks !== ctx.all){ return }
+				if(ctx.stun || (ctx.acks||0) !== ctx.all){ return } // normalize acks: undefined treated as 0 before first storage ack arrives.
 				ctx.root.on('in', {'@': ctx['#'], err: ctx.err, ok: ctx.err? u : ctx.ok || {'':1}});
 			}
 
