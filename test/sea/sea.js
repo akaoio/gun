@@ -993,6 +993,29 @@ describe('SEA', function(){
       }, {opt: {authenticator: authenticator}})
     })()});
 
+    it("full chain put: gun.get('~').get(c0)...get(cN).put({#:~pub}) registers full path", function(done){(async function(){
+      var bob = await SEA.pair();
+      var chunks = bob.pub.match(/.{1,2}/g) || [];
+      // Chain: gun.get('~').get(chunks[0]).get(chunks[1])...get(chunks[N]).put(leaf)
+      var node = gun.get('~');
+      for(var i = 0; i < chunks.length; i++){ node = node.get(chunks[i]) }
+      node.put({'#': '~' + bob.pub}, function(ack){
+        expect(ack.err).to.not.be.ok();
+        done();
+      }, {opt: {authenticator: bob}})
+    })()});
+
+    it("full chain put: rejects when no authenticator", function(done){(async function(){
+      var bob = await SEA.pair();
+      var chunks = bob.pub.match(/.{1,2}/g) || [];
+      var node = gun.get('~');
+      for(var i = 0; i < chunks.length; i++){ node = node.get(chunks[i]) }
+      node.put({'#': '~' + bob.pub}, function(ack){
+        expect(ack.err).to.be.ok();
+        done();
+      }) // no authenticator
+    })()});
+
     it("rejects shard path with double slash", function(done){
       gun.get('~/ab//cd').get('ef').put({'#':'~/ab//cd/ef'}, function(ack){
         expect(ack.err).to.be.ok();
