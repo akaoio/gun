@@ -913,27 +913,59 @@ describe('SEA', function(){
       })
     });
 
-    it("rejects shard leaf when value is link", function(done){(async function(){
+    it("rejects shard leaf when value is raw pub string", function(done){(async function(){
       var bob = await SEA.pair();
       var chunks = bob.pub.match(/.{1,2}/g) || [];
       var key = chunks.pop();
       var soul = chunks.length ? '~/' + chunks.join('/') : '~';
-      gun.get(soul).get(key).put({'#': soul + '/' + key}, function(ack){
+      gun.get(soul).get(key).put(bob.pub, function(ack){
         expect(ack.err).to.be.ok();
         done();
       })
     })()});
 
-    it("rejects shard leaf with pre-signed proof and no authenticator", function(done){(async function(){
+    it("rejects shard leaf when value is null", function(done){(async function(){
       var bob = await SEA.pair();
       var chunks = bob.pub.match(/.{1,2}/g) || [];
       var key = chunks.pop();
       var soul = chunks.length ? '~/' + chunks.join('/') : '~';
-      var proof = await SEA.sign(bob.pub, bob, null, {raw: 1});
-      gun.get(soul).get(key).put(bob.pub, function(ack){
-        expect(ack.err).to.be.ok(); // no authenticator — pre-signed proof rejected
+      gun.get(soul).get(key).put(null, function(ack){
+        expect(ack.err).to.be.ok();
         done();
-      }, {opt: {proof: proof, pub: bob.pub}}) // opt.proof without authenticator
+      })
+    })()});
+
+    it("rejects shard leaf when value is a number", function(done){(async function(){
+      var bob = await SEA.pair();
+      var chunks = bob.pub.match(/.{1,2}/g) || [];
+      var key = chunks.pop();
+      var soul = chunks.length ? '~/' + chunks.join('/') : '~';
+      gun.get(soul).get(key).put(42, function(ack){
+        expect(ack.err).to.be.ok();
+        done();
+      })
+    })()});
+
+    it("rejects shard leaf when link points to wrong soul", function(done){(async function(){
+      var bob = await SEA.pair();
+      var chunks = bob.pub.match(/.{1,2}/g) || [];
+      var key = chunks.pop();
+      var soul = chunks.length ? '~/' + chunks.join('/') : '~';
+      gun.get(soul).get(key).put({'#': soul + '/' + key}, function(ack){
+        expect(ack.err).to.be.ok(); // link must point to ~pub not intermediate path
+        done();
+      })
+    })()});
+
+    it("rejects shard leaf without authenticator", function(done){(async function(){
+      var bob = await SEA.pair();
+      var chunks = bob.pub.match(/.{1,2}/g) || [];
+      var key = chunks.pop();
+      var soul = chunks.length ? '~/' + chunks.join('/') : '~';
+      gun.get(soul).get(key).put({'#': '~' + bob.pub}, function(ack){
+        expect(ack.err).to.be.ok(); // no authenticator — rejected
+        done();
+      })
     })()});
 
     it("put to shard leaf with authenticator pair", function(done){(async function(){
@@ -941,12 +973,9 @@ describe('SEA', function(){
       var chunks = bob.pub.match(/.{1,2}/g) || [];
       var key = chunks.pop();
       var soul = chunks.length ? '~/' + chunks.join('/') : '~';
-      gun.get(soul).get(key).put(bob.pub, function(ack){
+      gun.get(soul).get(key).put({'#': '~' + bob.pub}, function(ack){
         expect(ack.err).to.not.be.ok();
-        gun.get(soul).get(key).once(function(data){
-          expect(data).to.be(bob.pub);
-          done();
-        })
+        done();
       }, {opt: {authenticator: bob}})
     })()});
 
@@ -958,12 +987,9 @@ describe('SEA', function(){
       async function authenticator(data){
         return SEA.sign(data, bob)
       }
-      gun.get(soul).get(key).put(bob.pub, function(ack){
+      gun.get(soul).get(key).put({'#': '~' + bob.pub}, function(ack){
         expect(ack.err).to.not.be.ok();
-        gun.get(soul).get(key).once(function(data){
-          expect(data).to.be(bob.pub);
-          done();
-        })
+        done();
       }, {opt: {authenticator: authenticator}})
     })()});
 

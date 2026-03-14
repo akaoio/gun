@@ -1875,9 +1875,20 @@
       if((path.length + 1) > check.$sh.max){ return no("Invalid shard depth.") }
       leaf = check.$leaf(soul, key)
       if(leaf){
-        if(link){ return no("Shard leaf cannot be link.") }
-        // Always sign fresh via check.pub — sig covers state, preventing pre-signed writes
-        return check.pub(eve, msg, val, key, soul, at, no, user, leaf, {want: leaf, nocert: 1, err: "Shard leaf payload must equal pub."})
+        if(!link){ return no("Shard leaf value must be a link.") }
+        if(link !== '~' + leaf){ return no("Shard leaf link must point to ~pub.") }
+        // Always sign fresh — authenticator required; sig covers state, preventing pre-signed writes
+        var lsec = check.$sea(msg, user, leaf)
+        var lauthenticator = lsec.authenticator
+        var lupub = lsec.upub || (lauthenticator||{}).pub
+        if(!lauthenticator){ return no("Shard leaf requires authenticator.") }
+        if(lupub !== leaf){ return no("Shard leaf authenticator pub mismatch.") }
+        check.auth(msg, no, lauthenticator, function(data){
+          if(link_is(data) !== link){ return no("Shard leaf signed payload mismatch.") }
+          msg.put['='] = {'#': link}
+          check.next(eve, msg, no)
+        })
+        return
       }
       // Intermediate
       expected = check.$kid(soul, key)
