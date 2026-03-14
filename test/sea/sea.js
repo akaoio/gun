@@ -862,6 +862,19 @@ describe('SEA', function(){
       }, {opt: {authenticator: authenticator}}) // no opt.pub → claim undefined
     })()});
 
+    it("rejects shard intermediate with state too far in future", function(done){(async function(){
+      var bob = await SEA.pair();
+      var key = bob.pub.slice(0, 2);
+      var expected = '~/' + key;
+      // HAM.max is 1 week; inject a state 2 weeks in the future.
+      // HAM now rejects immediately with an error — ack.err is set before SEA runs.
+      var futureState = Gun.state() + (1000 * 60 * 60 * 24 * 14);
+      gun.get('~').get(key).put({'#': expected}, function(ack){
+        expect(ack.err).to.be.ok();
+        done();
+      }, {state: futureState, opt: {authenticator: bob}});
+    })()});
+
     it("rejects shard intermediate without authenticator", function(done){(async function(){
       var bob = await SEA.pair();
       var key = bob.pub.slice(0, 2);

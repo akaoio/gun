@@ -31,7 +31,7 @@
         base = mod(base, modulus);
         let result = BigInt(1);
         let exp = exponent;
-        
+
         // Process all bits with constant execution time
         while (exp > BigInt(0)) {
             const bit = exp & BigInt(1);
@@ -92,15 +92,15 @@
         if (!/^[A-Za-z0-9_-]*={0,2}$/.test(s)) {
           throw new Error("Invalid base64 characters detected");
         }
-        
+
         try {
           const hex = shim.Buffer.from(atob(s), 'binary').toString('hex');
-          
+
           // Validate result is within P-256 range (256 bits / 64 hex chars)
           if (hex.length > 64) {
             throw new Error("Decoded value exceeds 256 bits for P-256");
           }
-          
+
           const value = BigInt('0x' + hex);
           return value;
         } catch (e) {
@@ -178,22 +178,22 @@
         combined.set(new Uint8Array(buf), 0);
         combined.set(new Uint8Array(enc.encode(salt).buffer), buf.byteLength);
         const hash = await subtle.digest("SHA-256", combined.buffer);
-        
+
         // Use rejected resampling for uniform distribution
         // Keep hashing until we get a valid private key in range [1, n)
         let hashData = hash;
         let attemptCount = 0;
         const maxAttempts = 100; // Prevent infinite loops
-        
+
         while (attemptCount < maxAttempts) {
           let priv = BigInt("0x" + Array.from(new Uint8Array(hashData))
             .map(b => b.toString(16).padStart(2, "0")).join(""));
-          
+
           // Check if priv is in valid range [1, n)
           if (priv > 0n && priv < n) {
             return priv;
           }
-          
+
           // Resample by hashing the previous result with counter
           const counterBuf = new Uint8Array(4);
           new DataView(counterBuf.buffer).setUint32(0, attemptCount, true);
@@ -203,7 +203,7 @@
           hashData = await subtle.digest("SHA-256", combined2.buffer);
           attemptCount++;
         }
-        
+
         throw new Error("Failed to generate valid private key after " + maxAttempts + " attempts");
       };
       const hashToScalar = async (seed, label, counter) => {

@@ -125,7 +125,10 @@ Gun.ask = require('./ask');
 
 		var now = State(), u;
 		if(state > now){
-			setTimeout(function(){ ham(val, key, soul, state, msg) }, (tmp = state - now) > MD? MD : tmp); // Max Defer 32bit. :(
+			if((tmp = state - now) > Ham.max){
+				msg.err = ctx.err = ERR+cut(key)+"on"+cut(soul)+"state too far in future."; ctx.stun = 0; ctx.acks = ctx.acks || 0; fire(ctx); back(ctx); return;
+			}
+			setTimeout(function(){ ham(val, key, soul, state, msg) }, tmp > MD? MD : tmp); // Max Defer 32bit. :(
 			console.STAT && console.STAT(((DBG||ctx).Hf = +new Date), tmp, 'future');
 			return;
 		}
@@ -194,6 +197,7 @@ Gun.ask = require('./ask');
 	var ERR = "Error: Invalid graph!";
 	var cut = function(s){ return " '"+(''+s).slice(0,9)+"...' " }
 	var L = JSON.stringify, MD = 2147483647, State = Gun.state;
+	var Ham = ham; Ham.max = 1000 * 60 * 60 * 24 * 7; // 1 week: legit clock skew is seconds, not days.
 	var C = 0, CT, CF = function(){if(C>999 && (C/-(CT - (CT = +new Date))>1)){Gun.window && console.log("Warning: You're syncing 1K+ records a second, faster than DOM can update - consider limiting query.");CF=function(){C=0}}};
 
 }());
