@@ -33,6 +33,7 @@
         if(u === get){
           if(act.name){ return act.err('Your user account is not published for dApps to access, please consider syncing it online, or allowing local access by adding your device as a peer.') }
           if(alias && retries--){
+            act.enc = u; act.legacy = false; act.base64 = false; // reset for retry
             root.get('~@'+alias).once(act.a);
             return;
           }
@@ -42,7 +43,19 @@
       }
       act.c = function(auth){
         if(u === auth){ return act.b() }
-        if('string' == typeof auth){ return act.c(obj_ify(auth)) } // in case of legacy
+        if('string' == typeof auth){
+          // SEA{...} format needs prefix-stripped parse; plain JSON handled by obj_ify
+          if('SEA{' === auth.slice(0,4)){
+            SEA.opt.parse(auth).then(function(env){ // env = {m: innerJSON, s: sig}
+              if(!env || !env.m){ return act.c(obj_ify(auth)) }
+              // env.m may be a string (bob) or array [soul, key, json, ts] (alice legacy [])
+              var payload = Array.isArray(env.m) ? env.m[2] : env.m;
+              act.c(obj_ify(payload)); // parse the inner {ek, s} payload
+            });
+            return;
+          }
+          return act.c(obj_ify(auth));
+        }
         SEA.work(pass, (act.auth = auth).s, act.d, act.enc); // the proof of work is evidence that we've spent some time/effort trying to log in, this slows brute force.
       }
       act.d = function(proof){
@@ -51,16 +64,22 @@
       }
       act.e = function(half){
         if(u === half){
-          if(!act.proofLegacyTried && act.proof){
-            act.proofLegacyTried = true;
-            var tmp = act.proof.replace(/-/g, '+').replace(/_/g, '/');
-            while(tmp.length % 4){ tmp += '=' }
-            return SEA.decrypt(act.auth.ek, tmp, act.e, act.enc);
-          }
-          if(!act.enc){ // try old format
+          if(!act.enc){ // try utf8 (common legacy format)
             act.enc = {encode: 'utf8'};
             return act.c(act.auth);
-          } act.enc = null; // end backwards
+          }
+          if(!act.base64){ // try base64url (old default pre-base62, shimmed btoa)
+            act.base64 = true; // use flag, not enc check — decrypt.js mutates enc.encode via fallback
+            act.enc = {encode: 'base64'};
+            return act.c(act.auth);
+          }
+          if(!act.legacy && act.proof){ // convert base64url proof -> standard base64 (pre-shim era, e.g. 2019 browser users)
+            act.legacy = true;
+            var tmp = act.proof.replace(/-/g, '+').replace(/_/g, '/');
+            while(tmp.length % 4){ tmp += '=' }
+            return SEA.decrypt(act.auth.ek, tmp, act.e, {encode: 'base64'}); // fresh opt: act.enc may be mutated by decrypt's internal fallback
+          }
+          act.enc = null; // end backwards
           return act.b();
         }
         act.half = half;

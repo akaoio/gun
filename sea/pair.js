@@ -2,6 +2,7 @@
 
     var SEA = require('./root');
     var shim = require('./shim');
+    var b62 = SEA.base62;
 
     // P-256 curve constants
     const n = BigInt("0xffffffff00000000ffffffffffffffffbce6faada7179e84f3b9cac2fc632551");
@@ -132,17 +133,14 @@
         ensurePrivRange(priv, 'Private key');
         const pub = pointMult(priv, G);
         if (!isOnCurve(pub)) throw new Error("Invalid point generated");
-        return biToB64(pub.x) + '.' + biToB64(pub.y);
+        return b62.biToB62(pub.x) + b62.biToB62(pub.y);
       };
       const parsePub = pubStr => {
         if (!pubStr || typeof pubStr !== 'string') {
           throw new Error("Invalid pub format: must be string");
         }
-        const parts = pubStr.split('.');
-        if (parts.length !== 2) {
-          throw new Error("Invalid pub format: must be x.y");
-        }
-        const point = { x: b64ToBI(parts[0]), y: b64ToBI(parts[1]) };
+        const xy = b62.pubToJwkXY(pubStr); // handles both old (87) and new (88) format
+        const point = { x: b64ToBI(xy.x), y: b64ToBI(xy.y) };
         if (point.x >= P || point.y >= P) {
           throw new Error("Invalid public key: out of range");
         }
@@ -155,7 +153,7 @@
         if (!point || !isOnCurve(point)) {
           throw new Error("Invalid point: not on curve");
         }
-        return biToB64(point.x) + '.' + biToB64(point.y);
+        return b62.biToB62(point.x) + b62.biToB62(point.y);
       };
       const seedToBuffer = seed => {
         const enc = new shim.TextEncoder();
@@ -277,7 +275,7 @@
           const derivedEpriv = encResult.derivedPriv;
           const derivedEpub = pointMult(derivedEpriv, G);
           r.epriv = biToB64(derivedEpriv);
-          r.epub = pointToPub(derivedEpub);
+          r.epub = pointToPub(derivedEpub); // pointToPub now outputs base62
         }
         if (opt.pub) {
           const pubPoint = parsePub(opt.pub);
@@ -301,8 +299,8 @@
             const dh = await ecdhSubtle.generateKey({name: 'ECDH', namedCurve: 'P-256'}, true, ['deriveKey'])
             .then(async k => ({ 
               epriv: (await ecdhSubtle.exportKey('jwk', k.privateKey)).d,
-              epub: (await ecdhSubtle.exportKey('jwk', k.publicKey)).x + '.' + 
-                    (await ecdhSubtle.exportKey('jwk', k.publicKey)).y
+              epub: b62.b64ToB62((await ecdhSubtle.exportKey('jwk', k.publicKey)).x) +
+                    b62.b64ToB62((await ecdhSubtle.exportKey('jwk', k.publicKey)).y)
             }));
             r.epriv = dh.epriv; r.epub = dh.epub;
           } catch(e) {}
@@ -318,8 +316,8 @@
           const sa = await subtle.generateKey({name: 'ECDSA', namedCurve: 'P-256'}, true, ['sign', 'verify'])
           .then(async k => ({ 
             priv: (await subtle.exportKey('jwk', k.privateKey)).d,
-            pub: (await subtle.exportKey('jwk', k.publicKey)).x + '.' + 
-                 (await subtle.exportKey('jwk', k.publicKey)).y
+            pub: b62.b64ToB62((await subtle.exportKey('jwk', k.publicKey)).x) +
+                 b62.b64ToB62((await subtle.exportKey('jwk', k.publicKey)).y)
           }));
           r.priv = sa.priv; r.pub = sa.pub;
         }
@@ -334,16 +332,16 @@
         const sa = await subtle.generateKey({name: 'ECDSA', namedCurve: 'P-256'}, true, ['sign', 'verify'])
         .then(async k => ({ 
           priv: (await subtle.exportKey('jwk', k.privateKey)).d,
-          pub: (await subtle.exportKey('jwk', k.publicKey)).x + '.' + 
-               (await subtle.exportKey('jwk', k.publicKey)).y
+          pub: b62.b64ToB62((await subtle.exportKey('jwk', k.publicKey)).x) +
+               b62.b64ToB62((await subtle.exportKey('jwk', k.publicKey)).y)
         }));
         r = { pub: sa.pub, priv: sa.priv };
         try {
           const dh = await ecdhSubtle.generateKey({name: 'ECDH', namedCurve: 'P-256'}, true, ['deriveKey'])
           .then(async k => ({ 
             epriv: (await ecdhSubtle.exportKey('jwk', k.privateKey)).d,
-            epub: (await ecdhSubtle.exportKey('jwk', k.publicKey)).x + '.' + 
-                  (await ecdhSubtle.exportKey('jwk', k.publicKey)).y
+            epub: b62.b64ToB62((await ecdhSubtle.exportKey('jwk', k.publicKey)).x) +
+                  b62.b64ToB62((await ecdhSubtle.exportKey('jwk', k.publicKey)).y)
           }));
           r.epub = dh.epub; r.epriv = dh.epriv;
         } catch(e) {}

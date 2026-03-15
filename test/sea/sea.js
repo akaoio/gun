@@ -383,6 +383,62 @@ describe('SEA', function(){
     }())})
   });
 
+  describe('pair() key format', function() {
+    var B62 = /^[A-Za-z0-9]{88}$/;
+    var B64URL_43 = /^[A-Za-z0-9\-_]{43}$/;
+
+    it('pub is 88-char base62 (no dot, dash, underscore)', async function() {
+      var pair = await SEA.pair();
+      expect(pair.pub).to.be.a('string');
+      expect(pair.pub.length).to.be(88);
+      expect(B62.test(pair.pub)).to.be(true);
+    });
+
+    it('epub is 88-char base62 (no dot, dash, underscore)', async function() {
+      var pair = await SEA.pair();
+      expect(pair.epub).to.be.a('string');
+      expect(pair.epub.length).to.be(88);
+      expect(B62.test(pair.epub)).to.be(true);
+    });
+
+    it('priv stays base64url 43 chars', async function() {
+      var pair = await SEA.pair();
+      expect(pair.priv).to.be.a('string');
+      expect(pair.priv.length).to.be(43);
+      expect(B64URL_43.test(pair.priv)).to.be(true);
+    });
+
+    it('epriv stays base64url 43 chars', async function() {
+      var pair = await SEA.pair();
+      expect(pair.epriv).to.be.a('string');
+      expect(pair.epriv.length).to.be(43);
+      expect(B64URL_43.test(pair.epriv)).to.be(true);
+    });
+
+    it('pub and epub differ (ECDSA vs ECDH keys)', async function() {
+      var pair = await SEA.pair();
+      expect(pair.pub).to.not.be(pair.epub);
+    });
+
+    it('format holds across multiple independent pairs', async function() {
+      var pairs = await Promise.all([SEA.pair(), SEA.pair(), SEA.pair()]);
+      pairs.forEach(function(p) {
+        expect(B62.test(p.pub)).to.be(true);
+        expect(B62.test(p.epub)).to.be(true);
+        expect(B64URL_43.test(p.priv)).to.be(true);
+        expect(B64URL_43.test(p.epriv)).to.be(true);
+      });
+    });
+
+    it('seed-based pair has same format', async function() {
+      var pair = await SEA.pair(null, { seed: 'test-seed-format' });
+      expect(B62.test(pair.pub)).to.be(true);
+      expect(B62.test(pair.epub)).to.be(true);
+      expect(B64URL_43.test(pair.priv)).to.be(true);
+      expect(B64URL_43.test(pair.epriv)).to.be(true);
+    });
+  });
+
   describe('Seed-based Key Generation', function() {
     this.timeout(5000); // Set timeout for all tests in this suite
     

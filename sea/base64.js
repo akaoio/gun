@@ -1,8 +1,9 @@
 ;(function(){
 
     var u, root = (typeof globalThis !== "undefined") ? globalThis : (typeof global !== "undefined" ? global : (typeof window !== "undefined" ? window : this));
-    var nativeBtoa = (u+'' != typeof root.btoa) && root.btoa;
-    var nativeAtob = (u+'' != typeof root.atob) && root.atob;
+    var native = {}
+    native.btoa = (u+'' != typeof root.btoa) && root.btoa;
+    native.atob = (u+'' != typeof root.atob) && root.atob;
     if(u+'' == typeof Buffer){
       if(u+'' != typeof require){
         try{ root.Buffer = require("buffer", 1).Buffer }catch(e){ console.log("Please `npm install buffer` or add it to your package.json !") }
@@ -17,14 +18,14 @@
       };
       return;
     }
-    if(nativeBtoa){
-      root.btoa = function(data){ return nativeBtoa(data).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, ''); };
+    if(native.btoa){
+      root.btoa = function(data){ return native.btoa(data).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, ''); };
     }
-    if(nativeAtob){
+    if(native.atob){
       root.atob = function(data){
         var tmp = data.replace(/-/g, '+').replace(/_/g, '/')
         while(tmp.length % 4){ tmp += '=' }
-        return nativeAtob(tmp);
+        return native.atob(tmp);
       };
     }
   

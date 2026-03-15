@@ -101,12 +101,12 @@
       no("Alias not same!"); // that way nobody can tamper with the list of public keys.
     };
     check.$sh = {
-      pub: 87,
+      pub: 88,
       cut: 2,
       min: 1,
       root: '~',
       pre: '~/',
-      bad: /[^0-9a-zA-Z._-]/
+      bad: /[^0-9a-zA-Z]/
     }
     check.$sh.max = Math.ceil(check.$sh.pub / check.$sh.cut)
     check.$seg = function(seg, short){
@@ -380,16 +380,18 @@
 
     var valid = Gun.valid, link_is = function(d,l){ return 'string' == typeof (l = valid(d)) && l }, state_ify = (Gun.state||'').ify;
 
-    var pubcut = /[^\w_-]/; // anything not alphanumeric or _ -
+    var pubcut = /[^\w_-]/; // kept for old-format parsing below
     SEA.opt.pub = function(s){
       if(!s){ return }
-      s = s.split('~');
-      if(!s || !(s = s[1])){ return }
-      s = s.split(pubcut).slice(0,2);
-      if(!s || 2 != s.length){ return }
+      s = s.split('~')[1]
+      if(!s){ return }
       if('@' === (s[0]||'')[0]){ return }
-      s = s.slice(0,2).join('.');
-      return s;
+      // New format: 88 alphanumeric chars (base62)
+      if(/^[A-Za-z0-9]{88}/.test(s)){ return s.slice(0, 88) }
+      // Old format: x.y (base64url, 87 chars) — backward compat for check.pub routing
+      var parts = s.split(pubcut).slice(0,2)
+      if(!parts || 2 !== parts.length){ return }
+      return parts.slice(0,2).join('.')
     }
     SEA.opt.stringy = function(t){
       // TODO: encrypt etc. need to check string primitive. Make as breaking change.

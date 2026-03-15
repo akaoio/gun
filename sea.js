@@ -47,8 +47,9 @@
 
   ;USE(function(module){
     var u, root = (typeof globalThis !== "undefined") ? globalThis : (typeof global !== "undefined" ? global : (typeof window !== "undefined" ? window : this));
-    var nativeBtoa = (u+'' != typeof root.btoa) && root.btoa;
-    var nativeAtob = (u+'' != typeof root.atob) && root.atob;
+    var native = {}
+    native.btoa = (u+'' != typeof root.btoa) && root.btoa;
+    native.atob = (u+'' != typeof root.atob) && root.atob;
     if(u+'' == typeof Buffer){
       if(u+'' != typeof require){
         try{ root.Buffer = USE("buffer", 1).Buffer }catch(e){ console.log("Please `npm install buffer` or add it to your package.json !") }
@@ -63,14 +64,14 @@
       };
       return;
     }
-    if(nativeBtoa){
-      root.btoa = function(data){ return nativeBtoa(data).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, ''); };
+    if(native.btoa){
+      root.btoa = function(data){ return native.btoa(data).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, ''); };
     }
-    if(nativeAtob){
+    if(native.atob){
       root.atob = function(data){
         var tmp = data.replace(/-/g, '+').replace(/_/g, '/')
         while(tmp.length % 4){ tmp += '=' }
-        return nativeAtob(tmp);
+        return native.atob(tmp);
       };
     }
   })(USE, './base64');
@@ -232,6 +233,119 @@
   ;USE(function(module){
     var SEA = USE('./root');
     var shim = USE('./shim');
+
+    // Base62 alphabet: digits → uppercase → lowercase (62 chars, a-zA-Z0-9 only)
+    var ALPHA = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
+    var ALPHA_MAP = {};
+    for (var i = 0; i < ALPHA.length; i++) { ALPHA_MAP[ALPHA[i]] = i; }
+
+    // Fixed output length for a 256-bit (32-byte) value in base62
+    // 62^44 > 2^256 ✓
+    var PUB_LEN = 44;
+
+    // BigInt → base62 string, zero-padded to PUB_LEN (44 chars)
+    function biToB62(n) {
+        if (typeof n !== 'bigint' || n < 0n) {
+            throw new Error('biToB62: input must be non-negative BigInt');
+        }
+        var s = '';
+        var v = n;
+        while (v > 0n) {
+            s = ALPHA[Number(v % 62n)] + s;
+            v = v / 62n;
+        }
+        while (s.length < PUB_LEN) { s = '0' + s; }
+        if (s.length > PUB_LEN) {
+            throw new Error('biToB62: value too large for ' + PUB_LEN + '-char base62');
+        }
+        return s;
+    }
+
+    // base62 string → BigInt (accepts exactly PUB_LEN chars)
+    function b62ToBI(s) {
+        if (typeof s !== 'string' || s.length !== PUB_LEN) {
+            throw new Error('b62ToBI: expected ' + PUB_LEN + '-char base62 string, got ' + (s && s.length));
+        }
+        if (!/^[A-Za-z0-9]+$/.test(s)) {
+            throw new Error('b62ToBI: invalid base62 characters');
+        }
+        var n = 0n;
+        for (var i = 0; i < s.length; i++) {
+            var c = ALPHA_MAP[s[i]];
+            if (c === undefined) { throw new Error('b62ToBI: unknown char ' + s[i]); }
+            n = n * 62n + BigInt(c);
+        }
+        return n;
+    }
+
+    // base64url string (43 chars, from JWK) → base62 (44 chars)
+    function b64ToB62(s) {
+        if (typeof s !== 'string' || !s) {
+            throw new Error('b64ToB62: input must be non-empty string');
+        }
+        var hex = shim.Buffer.from(atob(s), 'binary').toString('hex');
+        var n = BigInt('0x' + (hex || '0'));
+        return biToB62(n);
+    }
+
+    // base62 (44 chars) → base64url string (for JWK)
+    function b62ToB64(s) {
+        var n = b62ToBI(s);
+        var hex = n.toString(16).padStart(64, '0');
+        var b64 = shim.Buffer.from(hex, 'hex').toString('base64')
+            .replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+        return b64;
+    }
+
+    // Parse pub (old or new format) → { x, y } as base64url strings (for JWK importKey)
+    // Old format: [43 base64url].[43 base64url]  length=87
+    // New format: [44 base62][44 base62]          length=88
+    function pubToJwkXY(pub) {
+        if (typeof pub !== 'string') {
+            throw new Error('pubToJwkXY: pub must be a string');
+        }
+        if (pub.length === 87 && pub[43] === '.') {
+            // Old base64url format
+            var parts = pub.split('.');
+            if (parts.length !== 2) { throw new Error('pubToJwkXY: invalid old pub format'); }
+            return { x: parts[0], y: parts[1] };
+        }
+        if (pub.length === 88 && /^[A-Za-z0-9]{88}$/.test(pub)) {
+            // New base62 format
+            return {
+                x: b62ToB64(pub.slice(0, 44)),
+                y: b62ToB64(pub.slice(44))
+            };
+        }
+        throw new Error('pubToJwkXY: unrecognised pub format (length=' + pub.length + ')');
+    }
+
+    // Encode arbitrary Buffer/Uint8Array as base62: chunks into 32-byte blocks, each → 44 chars
+    // e.g. SHA-256 (32B) → 44 chars, PBKDF2 (64B) → 88 chars
+    function bufToB62(buf) {
+        var out = '';
+        for (var i = 0; i < buf.length; i += 32) {
+            var end = Math.min(i + 32, buf.length);
+            var hex = '';
+            // left-pad short last chunk to 32 bytes
+            for (var p = 0; p < 32 - (end - i); p++) { hex += '00'; }
+            for (var j = i; j < end; j++) {
+                hex += ('0' + buf[j].toString(16)).slice(-2);
+            }
+            out += biToB62(BigInt('0x' + hex));
+        }
+        return out;
+    }
+
+    var b62 = { biToB62: biToB62, b62ToBI: b62ToBI, b64ToB62: b64ToB62, b62ToB64: b62ToB64, pubToJwkXY: pubToJwkXY, bufToB62: bufToB62, PUB_LEN: PUB_LEN };
+    SEA.base62 = b62;
+    module.exports = b62;
+  })(USE, './base62');
+
+  ;USE(function(module){
+    var SEA = USE('./root');
+    var shim = USE('./shim');
+    var b62 = SEA.base62;
     var s = {};
     s.pbkdf2 = {hash: {name : 'SHA-256'}, iter: 100000, ks: 64};
     s.ecdsa = {
@@ -242,8 +356,8 @@
 
     // This creates Web Cryptography API compliant JWK for sign/verify purposes
     s.jwk = function(pub, d){  // d === priv
-      pub = pub.split('.');
-      var x = pub[0], y = pub[1];
+      var xy = b62.pubToJwkXY(pub); // handles old (87-char x.y) and new (88-char base62)
+      var x = xy.x, y = xy.y;
       var jwk = {kty: "EC", crv: "P-256", x: x, y: y, ext: true};
       jwk.key_ops = d ? ['sign'] : ['verify'];
       if(d){ jwk.d = d }
@@ -302,6 +416,8 @@
     SEA.work = SEA.work || (async (data, pair, cb, opt) => { try { // used to be named `proof`
       var salt = (pair||{}).epub || pair; // epub not recommended, salt should be random!
       opt = opt || {};
+      var enc = opt.encode || 'base62';
+      var b62 = SEA.base62;
       if(salt instanceof Function){
         cb = salt;
         salt = u;
@@ -314,7 +430,7 @@
       data = (typeof data == 'string') ? data : await shim.stringify(data);
       if('sha' === (opt.name||'').toLowerCase().slice(0,3)){
         var rsha = shim.Buffer.from(await sha(data, opt.name), 'binary');
-        rsha = ('base64' === (opt.encode || 'base64'))? btoa(String.fromCharCode(...new Uint8Array(rsha))) : rsha.toString(opt.encode || 'base64');
+        rsha = ('base62' === enc) ? b62.bufToB62(rsha) : ('base64' === enc) ? btoa(String.fromCharCode(...new Uint8Array(rsha))) : rsha.toString(enc);
         if(cb){ try{ cb(rsha) }catch(e){console.log(e)} }
         return rsha;
       }
@@ -330,7 +446,7 @@
       }, key, opt.length || (S.pbkdf2.ks * 8))
       data = shim.random(data.length)  // Erase data in case of passphrase
       var r = shim.Buffer.from(work, 'binary');
-      r = ('base64' === (opt.encode || 'base64'))? btoa(String.fromCharCode(...new Uint8Array(r))) : r.toString(opt.encode || 'base64');
+      r = ('base62' === enc) ? b62.bufToB62(r) : ('base64' === enc) ? btoa(String.fromCharCode(...new Uint8Array(r))) : r.toString(enc);
       if(cb){ try{ cb(r) }catch(e){console.log(e)} }
       return r;
     } catch(e) { 
@@ -347,6 +463,7 @@
   ;USE(function(module){
     var SEA = USE('./root');
     var shim = USE('./shim');
+    var b62 = SEA.base62;
 
     // P-256 curve constants
     const n = BigInt("0xffffffff00000000ffffffffffffffffbce6faada7179e84f3b9cac2fc632551");
@@ -477,17 +594,14 @@
         ensurePrivRange(priv, 'Private key');
         const pub = pointMult(priv, G);
         if (!isOnCurve(pub)) throw new Error("Invalid point generated");
-        return biToB64(pub.x) + '.' + biToB64(pub.y);
+        return b62.biToB62(pub.x) + b62.biToB62(pub.y);
       };
       const parsePub = pubStr => {
         if (!pubStr || typeof pubStr !== 'string') {
           throw new Error("Invalid pub format: must be string");
         }
-        const parts = pubStr.split('.');
-        if (parts.length !== 2) {
-          throw new Error("Invalid pub format: must be x.y");
-        }
-        const point = { x: b64ToBI(parts[0]), y: b64ToBI(parts[1]) };
+        const xy = b62.pubToJwkXY(pubStr); // handles both old (87) and new (88) format
+        const point = { x: b64ToBI(xy.x), y: b64ToBI(xy.y) };
         if (point.x >= P || point.y >= P) {
           throw new Error("Invalid public key: out of range");
         }
@@ -500,7 +614,7 @@
         if (!point || !isOnCurve(point)) {
           throw new Error("Invalid point: not on curve");
         }
-        return biToB64(point.x) + '.' + biToB64(point.y);
+        return b62.biToB62(point.x) + b62.biToB62(point.y);
       };
       const seedToBuffer = seed => {
         const enc = new shim.TextEncoder();
@@ -622,7 +736,7 @@
           const derivedEpriv = encResult.derivedPriv;
           const derivedEpub = pointMult(derivedEpriv, G);
           r.epriv = biToB64(derivedEpriv);
-          r.epub = pointToPub(derivedEpub);
+          r.epub = pointToPub(derivedEpub); // pointToPub now outputs base62
         }
         if (opt.pub) {
           const pubPoint = parsePub(opt.pub);
@@ -646,8 +760,8 @@
             const dh = await ecdhSubtle.generateKey({name: 'ECDH', namedCurve: 'P-256'}, true, ['deriveKey'])
             .then(async k => ({ 
               epriv: (await ecdhSubtle.exportKey('jwk', k.privateKey)).d,
-              epub: (await ecdhSubtle.exportKey('jwk', k.publicKey)).x + '.' + 
-                    (await ecdhSubtle.exportKey('jwk', k.publicKey)).y
+              epub: b62.b64ToB62((await ecdhSubtle.exportKey('jwk', k.publicKey)).x) +
+                    b62.b64ToB62((await ecdhSubtle.exportKey('jwk', k.publicKey)).y)
             }));
             r.epriv = dh.epriv; r.epub = dh.epub;
           } catch(e) {}
@@ -663,8 +777,8 @@
           const sa = await subtle.generateKey({name: 'ECDSA', namedCurve: 'P-256'}, true, ['sign', 'verify'])
           .then(async k => ({ 
             priv: (await subtle.exportKey('jwk', k.privateKey)).d,
-            pub: (await subtle.exportKey('jwk', k.publicKey)).x + '.' + 
-                 (await subtle.exportKey('jwk', k.publicKey)).y
+            pub: b62.b64ToB62((await subtle.exportKey('jwk', k.publicKey)).x) +
+                 b62.b64ToB62((await subtle.exportKey('jwk', k.publicKey)).y)
           }));
           r.priv = sa.priv; r.pub = sa.pub;
         }
@@ -679,16 +793,16 @@
         const sa = await subtle.generateKey({name: 'ECDSA', namedCurve: 'P-256'}, true, ['sign', 'verify'])
         .then(async k => ({ 
           priv: (await subtle.exportKey('jwk', k.privateKey)).d,
-          pub: (await subtle.exportKey('jwk', k.publicKey)).x + '.' + 
-               (await subtle.exportKey('jwk', k.publicKey)).y
+          pub: b62.b64ToB62((await subtle.exportKey('jwk', k.publicKey)).x) +
+               b62.b64ToB62((await subtle.exportKey('jwk', k.publicKey)).y)
         }));
         r = { pub: sa.pub, priv: sa.priv };
         try {
           const dh = await ecdhSubtle.generateKey({name: 'ECDH', namedCurve: 'P-256'}, true, ['deriveKey'])
           .then(async k => ({ 
             epriv: (await ecdhSubtle.exportKey('jwk', k.privateKey)).d,
-            epub: (await ecdhSubtle.exportKey('jwk', k.publicKey)).x + '.' + 
-                  (await ecdhSubtle.exportKey('jwk', k.publicKey)).y
+            epub: b62.b64ToB62((await ecdhSubtle.exportKey('jwk', k.publicKey)).x) +
+                  b62.b64ToB62((await ecdhSubtle.exportKey('jwk', k.publicKey)).y)
           }));
           r.epub = dh.epub; r.epriv = dh.epriv;
         } catch(e) {}
@@ -781,6 +895,7 @@
     var shim = USE('./shim');
     var S = USE('./settings');
     var sha = USE('./sha256');
+    var b62 = SEA.base62;
     var u;
 
     async function w(j, k, s) {
@@ -823,7 +938,8 @@
 
       o = o || {};
       var pub = p.pub || p;
-      var [x, y] = pub.split('.');
+      var xy = b62.pubToJwkXY(pub);
+      var x = xy.x, y = xy.y;
 
       try {
         var k = await (shim.ossl || shim.subtle).importKey('jwk', {
@@ -1033,6 +1149,7 @@
     var SEA = USE('./root');
     var shim = USE('./shim');
     var S = USE('./settings');
+    var b62 = SEA.base62;
     // Derive shared secret from other's pub and my epub/epriv 
     SEA.secret = SEA.secret || (async (key, pair, cb, opt) => { try {
       opt = opt || {};
@@ -1067,8 +1184,8 @@
 
     // can this be replaced with settings.jwk?
     var keysToEcdhJwk = (pub, d) => { // d === priv
-      //var [ x, y ] = shim.Buffer.from(pub, 'base64').toString('utf8').split(':') // old
-      var [ x, y ] = pub.split('.') // new
+      var xy = b62.pubToJwkXY(pub) // handles old (87) and new (88) format
+      var x = xy.x, y = xy.y
       var jwk = d ? { d: d } : {}
       return [  // Use with spread returned value...
         'jwk',
@@ -1404,6 +1521,7 @@
         if(u === get){
           if(act.name){ return act.err('Your user account is not published for dApps to access, please consider syncing it online, or allowing local access by adding your device as a peer.') }
           if(alias && retries--){
+            act.enc = u; act.legacy = false; act.base64 = false; // reset for retry
             root.get('~@'+alias).once(act.a);
             return;
           }
@@ -1413,7 +1531,19 @@
       }
       act.c = function(auth){
         if(u === auth){ return act.b() }
-        if('string' == typeof auth){ return act.c(obj_ify(auth)) } // in case of legacy
+        if('string' == typeof auth){
+          // SEA{...} format needs prefix-stripped parse; plain JSON handled by obj_ify
+          if('SEA{' === auth.slice(0,4)){
+            SEA.opt.parse(auth).then(function(env){ // env = {m: innerJSON, s: sig}
+              if(!env || !env.m){ return act.c(obj_ify(auth)) }
+              // env.m may be a string (bob) or array [soul, key, json, ts] (alice legacy [])
+              var payload = Array.isArray(env.m) ? env.m[2] : env.m;
+              act.c(obj_ify(payload)); // parse the inner {ek, s} payload
+            });
+            return;
+          }
+          return act.c(obj_ify(auth));
+        }
         SEA.work(pass, (act.auth = auth).s, act.d, act.enc); // the proof of work is evidence that we've spent some time/effort trying to log in, this slows brute force.
       }
       act.d = function(proof){
@@ -1422,16 +1552,22 @@
       }
       act.e = function(half){
         if(u === half){
-          if(!act.proofLegacyTried && act.proof){
-            act.proofLegacyTried = true;
-            var tmp = act.proof.replace(/-/g, '+').replace(/_/g, '/');
-            while(tmp.length % 4){ tmp += '=' }
-            return SEA.decrypt(act.auth.ek, tmp, act.e, act.enc);
-          }
-          if(!act.enc){ // try old format
+          if(!act.enc){ // try utf8 (common legacy format)
             act.enc = {encode: 'utf8'};
             return act.c(act.auth);
-          } act.enc = null; // end backwards
+          }
+          if(!act.base64){ // try base64url (old default pre-base62, shimmed btoa)
+            act.base64 = true; // use flag, not enc check — decrypt.js mutates enc.encode via fallback
+            act.enc = {encode: 'base64'};
+            return act.c(act.auth);
+          }
+          if(!act.legacy && act.proof){ // convert base64url proof -> standard base64 (pre-shim era, e.g. 2019 browser users)
+            act.legacy = true;
+            var tmp = act.proof.replace(/-/g, '+').replace(/_/g, '/');
+            while(tmp.length % 4){ tmp += '=' }
+            return SEA.decrypt(act.auth.ek, tmp, act.e, {encode: 'base64'}); // fresh opt: act.enc may be mutated by decrypt's internal fallback
+          }
+          act.enc = null; // end backwards
           return act.b();
         }
         act.half = half;
@@ -1807,12 +1943,12 @@
       no("Alias not same!"); // that way nobody can tamper with the list of public keys.
     };
     check.$sh = {
-      pub: 87,
+      pub: 88,
       cut: 2,
       min: 1,
       root: '~',
       pre: '~/',
-      bad: /[^0-9a-zA-Z._-]/
+      bad: /[^0-9a-zA-Z]/
     }
     check.$sh.max = Math.ceil(check.$sh.pub / check.$sh.cut)
     check.$seg = function(seg, short){
@@ -2086,16 +2222,18 @@
 
     var valid = Gun.valid, link_is = function(d,l){ return 'string' == typeof (l = valid(d)) && l }, state_ify = (Gun.state||'').ify;
 
-    var pubcut = /[^\w_-]/; // anything not alphanumeric or _ -
+    var pubcut = /[^\w_-]/; // kept for old-format parsing below
     SEA.opt.pub = function(s){
       if(!s){ return }
-      s = s.split('~');
-      if(!s || !(s = s[1])){ return }
-      s = s.split(pubcut).slice(0,2);
-      if(!s || 2 != s.length){ return }
+      s = s.split('~')[1]
+      if(!s){ return }
       if('@' === (s[0]||'')[0]){ return }
-      s = s.slice(0,2).join('.');
-      return s;
+      // New format: 88 alphanumeric chars (base62)
+      if(/^[A-Za-z0-9]{88}/.test(s)){ return s.slice(0, 88) }
+      // Old format: x.y (base64url, 87 chars) — backward compat for check.pub routing
+      var parts = s.split(pubcut).slice(0,2)
+      if(!parts || 2 !== parts.length){ return }
+      return parts.slice(0,2).join('.')
     }
     SEA.opt.stringy = function(t){
       // TODO: encrypt etc. need to check string primitive. Make as breaking change.

@@ -4,6 +4,7 @@
     var shim = require('./shim');
     var S = require('./settings');
     var sha = require('./sha256');
+    var b62 = SEA.base62;
     var u;
 
     async function w(j, k, s) {
@@ -46,7 +47,8 @@
 
       o = o || {};
       var pub = p.pub || p;
-      var [x, y] = pub.split('.');
+      var xy = b62.pubToJwkXY(pub);
+      var x = xy.x, y = xy.y;
 
       try {
         var k = await (shim.ossl || shim.subtle).importKey('jwk', {
