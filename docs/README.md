@@ -10,6 +10,7 @@ This fork includes several major enhancements to GunDB's Security, Encryption, a
 2. **[Additive Key Derivation](./additive-derivation.md)** - Hierarchical deterministic (HD) wallet capabilities
 3. **[WebAuthn Integration](./webauthn.md)** - Hardware security keys and biometric authentication
 4. **[External Authenticators](./external-authenticators.md)** - Custom signing mechanisms and stateless operations
+5. **[`globalThis` Migration](./globalthis-worker-compat.md)** - Full Web Worker / Service Worker compatibility across all `lib/` modules
 
 These features work together to provide enterprise-grade security, enhanced privacy, and modern authentication options.
 
@@ -74,6 +75,7 @@ SEA.base62.pubToJwkXY(pub)        // accepts both 87-char and 88-char pub
 
 5. **[Hashgraph Layer on GunDB (Draft)](./hashgraph-layer.md)** - Event DAG, voting/finality, and execution bridge design
 6. **[Tilde Shard Index](./tilde-shard.md)** - Sharded public-key index under the `~` namespace with SEA-enforced write rules
+7. **[`globalThis` Migration — Web Worker Compat](./globalthis-worker-compat.md)** - All `lib/` modules migrated from `window` to `globalThis` for universal environment support
 
 ---
 
@@ -257,6 +259,32 @@ gun.get(leafSoul).get(leafKey).put(pair.pub, null, { opt: { authenticator: pair 
 ```
 
 📖 **[Read full documentation →](./tilde-shard.md)**
+
+---
+
+### 7. `globalThis` Migration — Web Worker Compatibility
+
+**All `lib/` modules now use `globalThis` instead of `window`**
+
+This makes GUN's entire library layer runnable in Web Workers, Service Workers, Node.js, and any non-browser JavaScript environment:
+- Every `window` reference in `lib/*.js` replaced with `globalThis`
+- Storage adapters (`rindexed.js`, `radisk.js`, `rls.js`) self-register on `globalThis` — discoverable inside Workers
+- `Gun` class resolution from global scope works in all environments
+- `Gun.window` property retained as an internal sentential — set to `globalThis` when running in a Worker
+- DOM-dependent helpers (`dom.js`, `fun.js`) silently no-op in headless environments
+
+```javascript
+// worker.js — GUN now works fully inside a Web Worker
+import Gun from '/gun.js'
+import '/lib/rindexed.js'   // IndexedDB — Worker-safe
+
+const gun = Gun({ peers: ['https://relay.example.com/gun'] })
+gun.get('~').map().once((data, key) => {
+    postMessage({ key, data })  // send discovered pubs to main thread
+})
+```
+
+📖 **[Read full documentation →](./globalthis-worker-compat.md)**
 
 ---
 
