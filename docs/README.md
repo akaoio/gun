@@ -13,6 +13,63 @@ This fork includes several major enhancements to GunDB's Security, Encryption, a
 
 These features work together to provide enterprise-grade security, enhanced privacy, and modern authentication options.
 
+---
+
+## 🔑 Key Format — Full Base62
+
+**This fork changes ALL key material from base64url to base62 (`[A-Za-z0-9]` only).**
+
+### `pub` / `epub` (public keys)
+
+| | Old format | New format |
+|---|---|---|
+| Encoding | base64url (URL-safe base64) | base62 (`[A-Za-z0-9]` only) |
+| Chars | `x.y` — two 43-char values joined by `.` | `xy` — two 44-char values concatenated |
+| Total length | **87** | **88** |
+| Characters used | `A-Za-z0-9_-` + `.` separator | `A-Za-z0-9` only |
+
+### `priv` / `epriv` (private keys)
+
+| | Old format | New format |
+|---|---|---|
+| Encoding | base64url (JWK `.d` field) | base62 (`[A-Za-z0-9]` only) |
+| Total length | **43** | **44** |
+| Characters used | `A-Za-z0-9_-` | `A-Za-z0-9` only |
+
+Private keys are never written to the graph, but now use the same base62 alphabet for consistency — no more `-` / `_` characters in any key material.
+
+**Backward compatibility:**
+- `SEA.sign`, `SEA.secret` — accept **both** old (43-char base64url) and new (44-char base62) `priv`/`epriv` transparently.
+- `SEA.verify`, `SEA.sign`, `SEA.secret` — accept **both** old (87-char) and new (88-char) `pub`/`epub` transparently.
+- `gun.user().auth()` / `gun.user().create()` — continues to work; old user nodes at `~oldPub` are routed correctly.
+- **Tilde shard (`~/...`)** — **strictly requires base62 pub** (shard segment `bad` regex is `/[^0-9a-zA-Z]/`). Old-format pubs cannot be registered in shard paths.
+
+**Detection:**
+```javascript
+// pub/epub
+// Old:  pub.length === 87 && pub[43] === '.'
+// New:  pub.length === 88 && /^[A-Za-z0-9]{88}$/.test(pub)
+
+// priv/epriv
+// Old:  priv.length === 43 && /^[A-Za-z0-9_-]{43}$/.test(priv)
+// New:  priv.length === 44 && /^[A-Za-z0-9]{44}$/.test(priv)
+```
+
+**`SEA.base62` utility (exposed by `sea.js`):**
+```javascript
+// 32-byte Uint8Array → 44-char base62 (useful for WebAuthn raw coordinates)
+SEA.base62.bufToB62(uint8array)   // → "44charBase62String"
+
+// Convert between base64url ↔ base62 (for JWK interop)
+SEA.base62.b64ToB62(base64urlStr) // → 44-char base62
+SEA.base62.b62ToB64(b62str)       // → 43-char base64url  (WebCrypto JWK input)
+
+// Parse either format → { x, y } base64url (for WebCrypto JWK import)
+SEA.base62.pubToJwkXY(pub)        // accepts both 87-char and 88-char pub
+```
+
+---
+
 ### Protocol & Architecture Drafts
 
 5. **[Hashgraph Layer on GunDB (Draft)](./hashgraph-layer.md)** - Event DAG, voting/finality, and execution bridge design

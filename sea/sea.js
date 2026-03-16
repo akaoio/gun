@@ -1,6 +1,7 @@
 ;(function(){
 
     var shim = require('./shim');
+    var sha1hash = require('./sha1');
     // Practical examples about usage found in tests.
     var SEA = require('./root');
     SEA.work = require('./work');
@@ -25,9 +26,10 @@
     // Calculate public key KeyID aka PGPv4 (result: 8 bytes as hex string)
     SEA.keyid = SEA.keyid || (async (pub) => {
       try {
-        // base64('base64(x):base64(y)') => shim.Buffer(xy)
+        // Decode pub key coordinates (handles old 87-char base64url and new 88-char base62)
+        var xy = SEA.base62.pubToJwkXY(pub);
         const pb = shim.Buffer.concat(
-          pub.split('.').map((t) => shim.Buffer.from(atob(t), 'binary'))
+          [xy.x, xy.y].map((t) => shim.Buffer.from(atob(t.replace(/-/g,'+').replace(/_/g,'/')), 'binary'))
         )
         // id is PGPv4 compliant raw key
         const id = shim.Buffer.concat([

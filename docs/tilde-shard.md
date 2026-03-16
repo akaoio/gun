@@ -22,10 +22,12 @@ Shard namespace:
 - Shard souls: `~/...`
 
 Config (current):
-- `pub` length: `87`
+- `pub` length: `88`
 - `cut` (segment size): `2`
 - leaf key min/max: `1..2`
-- max depth: `ceil(87 / 2) = 44`
+- max depth: `ceil(88 / 2) = 44`
+
+> **New pub format (base62):** `pub` and `epub` are now **88 alphanumeric chars** (`[A-Za-z0-9]`), two concatenated 44-char base62 values (one per P-256 coordinate). The old format was `[43 base64url].[43 base64url]` = 87 chars with a `.` separator and `+/=` substitutions. Peer nodes still route old-format souls (`~oldPub`) for backward compatibility, but the shard namespace strictly requires the new format.
 
 ### Path/segment constraints
 
@@ -33,7 +35,7 @@ A shard soul is valid only when:
 - It is exactly `~`, or starts with `~/`.
 - It does not contain `//`.
 - It does not end with `/`.
-- Each path segment uses allowed chars only: `[0-9a-zA-Z._-]`.
+- Each path segment uses allowed chars only: `[0-9a-zA-Z]` (strict alphanumeric — no `.`, `_`, or `-`).
 - Intermediate path segments are fixed length `2`.
 
 Key constraints:
@@ -54,7 +56,7 @@ For non-leaf shard nodes:
 
 **Stored envelope for intermediate nodes:**
 ```json
-{ ":": {"#": "~/ab"}, "~": "<sig>", "*": "<fullPub87chars>" }
+{ ":":  {"#": "~/ab"}, "~": "<sig>", "*": "<fullPub88chars>" }
 ```
 The outer object is stored as a JSON string in the graph. `':'` holds the link, `'~'` holds the state-bound ECDSA signature, `'*'` holds the signer's full public key.
 
@@ -66,7 +68,7 @@ When a peer propagates an intermediate node that already exists locally with the
 
 ### 2) Leaf node
 
-A write is considered leaf when `path + key` reconstructs a valid pub (length 87 + pub format check).
+A write is considered leaf when `path + key` reconstructs a valid pub (length 88, base62 alphanumeric).
 
 Leaf rules:
 - Value **must not** be a link.

@@ -17,7 +17,8 @@
       var x = xy.x, y = xy.y;
       var jwk = {kty: "EC", crv: "P-256", x: x, y: y, ext: true};
       jwk.key_ops = d ? ['sign'] : ['verify'];
-      if(d){ jwk.d = d }
+      // Convert base62 priv (44-char) back to base64url for WebCrypto JWK importKey
+      if(d){ jwk.d = (d.length === 44 && /^[A-Za-z0-9]{44}$/.test(d)) ? b62.b62ToB64(d) : d }
       return jwk;
     };
 

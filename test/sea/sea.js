@@ -385,7 +385,7 @@ describe('SEA', function(){
 
   describe('pair() key format', function() {
     var B62 = /^[A-Za-z0-9]{88}$/;
-    var B64URL_43 = /^[A-Za-z0-9\-_]{43}$/;
+    var B62_44 = /^[A-Za-z0-9]{44}$/;
 
     it('pub is 88-char base62 (no dot, dash, underscore)', async function() {
       var pair = await SEA.pair();
@@ -401,18 +401,18 @@ describe('SEA', function(){
       expect(B62.test(pair.epub)).to.be(true);
     });
 
-    it('priv stays base64url 43 chars', async function() {
+    it('priv is 44-char base62', async function() {
       var pair = await SEA.pair();
       expect(pair.priv).to.be.a('string');
-      expect(pair.priv.length).to.be(43);
-      expect(B64URL_43.test(pair.priv)).to.be(true);
+      expect(pair.priv.length).to.be(44);
+      expect(B62_44.test(pair.priv)).to.be(true);
     });
 
-    it('epriv stays base64url 43 chars', async function() {
+    it('epriv is 44-char base62', async function() {
       var pair = await SEA.pair();
       expect(pair.epriv).to.be.a('string');
-      expect(pair.epriv.length).to.be(43);
-      expect(B64URL_43.test(pair.epriv)).to.be(true);
+      expect(pair.epriv.length).to.be(44);
+      expect(B62_44.test(pair.epriv)).to.be(true);
     });
 
     it('pub and epub differ (ECDSA vs ECDH keys)', async function() {
@@ -425,8 +425,8 @@ describe('SEA', function(){
       pairs.forEach(function(p) {
         expect(B62.test(p.pub)).to.be(true);
         expect(B62.test(p.epub)).to.be(true);
-        expect(B64URL_43.test(p.priv)).to.be(true);
-        expect(B64URL_43.test(p.epriv)).to.be(true);
+        expect(B62_44.test(p.priv)).to.be(true);
+        expect(B62_44.test(p.epriv)).to.be(true);
       });
     });
 
@@ -434,8 +434,8 @@ describe('SEA', function(){
       var pair = await SEA.pair(null, { seed: 'test-seed-format' });
       expect(B62.test(pair.pub)).to.be(true);
       expect(B62.test(pair.epub)).to.be(true);
-      expect(B64URL_43.test(pair.priv)).to.be(true);
-      expect(B64URL_43.test(pair.epriv)).to.be(true);
+      expect(B62_44.test(pair.priv)).to.be(true);
+      expect(B62_44.test(pair.epriv)).to.be(true);
     });
   });
 

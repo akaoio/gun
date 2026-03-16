@@ -31,16 +31,6 @@ WebAuthn requires:
 ### 1. Create a WebAuthn Credential
 
 ```javascript
-// Helper to encode/decode base64url
-const base64url = {
-    encode: function(buffer) {
-        return btoa(String.fromCharCode(...new Uint8Array(buffer)));
-    },
-    decode: function(str) {
-        return atob(str);
-    }
-};
-
 // Create a credential (register)
 const credential = await navigator.credentials.create({
     publicKey: {
@@ -83,11 +73,12 @@ const rawKey = new Uint8Array(publicKey);
 const xCoord = rawKey.slice(27, 59);
 const yCoord = rawKey.slice(59, 91);
 
-// Format as SEA-compatible public key
-const pub = `${base64url.encode(xCoord)}.${base64url.encode(yCoord)}`;
+// Format as SEA-compatible public key (new base62 format: 88 alphanumeric chars)
+// SEA.base62.bufToB62() converts a 32-byte Uint8Array → 44-char base62 string
+const pub = SEA.base62.bufToB62(xCoord) + SEA.base62.bufToB62(yCoord);
 
 console.log("Public key:", pub);
-// Example: "gI8VJP8J6CRkX34eTrY-z5pK-h7BrP7CqZk3DLM4rX0.Cv3mRRoJYtT-uGLyPcqNJwH0VxJ7Q9FLLnW9r8qgZ3M"
+// Example: "2BWVjPXJxj6HF9DKGK8q0WjBfGP1m7rZH4TnAkELqR3M0uYsVCa3xDZ4kRHbENm7TsOa2q1PmNu8L5nWFMW0dRA"
 ```
 
 ## Basic Usage
@@ -174,7 +165,8 @@ async function register() {
     const rawKey = new Uint8Array(publicKey);
     const xCoord = rawKey.slice(27, 59);
     const yCoord = rawKey.slice(59, 91);
-    pub = `${base64url.encode(xCoord)}.${base64url.encode(yCoord)}`;
+    // New base62 format: 88 alphanumeric chars (44 per coordinate)
+    pub = SEA.base62.bufToB62(xCoord) + SEA.base62.bufToB62(yCoord);
     
     // Create authenticator function
     authenticator = async (data) => {
@@ -412,7 +404,8 @@ const relaxedAuth = async (data) => {
 
 - Ensure algorithm is `-7` (ES256, P-256)
 - Check coordinate extraction (bytes 27-58 and 59-90)
-- Verify base64url encoding is correct
+- Verify `SEA.base62` is available (loaded from `sea.js`)
+- Ensure `SEA.base62.bufToB62()` is called on `Uint8Array` slices (not raw base64url strings)
 
 ### "Signature verification failed"
 

@@ -172,6 +172,54 @@
   })(USE, './shim');
 
   ;USE(function(module){
+    // Minimal base62 utilities for pub key encode/decode (migrated from base64url.dot format)
+    var Buffer = USE('./buffer');
+    var ALPHA = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
+    var ALPHA_MAP = {};
+    for (var i = 0; i < ALPHA.length; i++) { ALPHA_MAP[ALPHA[i]] = i; }
+    var PUB_LEN = 44;
+    function biToB62(n) {
+      var s = '', v = n;
+      while (v > 0n) { s = ALPHA[Number(v % 62n)] + s; v = v / 62n; }
+      while (s.length < PUB_LEN) { s = '0' + s; }
+      return s;
+    }
+    function b62ToBI(s) {
+      var n = 0n;
+      for (var i = 0; i < s.length; i++) { n = n * 62n + BigInt(ALPHA_MAP[s[i]]); }
+      return n;
+    }
+    // base64url (43 chars, JWK coord) → base62 (44 chars)
+    function b64ToB62(s) {
+      var hex = Buffer.from(atob(s), 'binary').toString('hex');
+      var n = BigInt('0x' + (hex || '0'));
+      return biToB62(n);
+    }
+    // base62 (44 chars) → base64url (for JWK importKey)
+    function b62ToB64(s) {
+      var n = b62ToBI(s);
+      var hex = n.toString(16).padStart(64, '0');
+      var b64 = Buffer.from(hex, 'hex').toString('base64')
+        .replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+      return b64;
+    }
+    // Parse pub → { x, y } as base64url strings for JWK importKey
+    // Old format: [43 base64url].[43 base64url] = 87 chars
+    // New format: [44 base62][44 base62]         = 88 chars
+    function pubToJwkXY(pub) {
+      if (pub.length === 87 && pub[43] === '.') {
+        var parts = pub.split('.');
+        return { x: parts[0], y: parts[1] };
+      }
+      if (pub.length === 88 && /^[A-Za-z0-9]{88}$/.test(pub)) {
+        return { x: b62ToB64(pub.slice(0, 44)), y: b62ToB64(pub.slice(44)) };
+      }
+      throw new Error('pubToJwkXY: invalid pub format (length=' + pub.length + ')');
+    }
+    module.exports = { b64ToB62: b64ToB62, pubToJwkXY: pubToJwkXY, PUB_LEN: PUB_LEN };
+  })(USE, './base62');
+
+  ;USE(function(module){
     const SEA = USE('./root');
     const Buffer = USE('./buffer')
     const settings = {}
@@ -190,10 +238,11 @@
     // These are used to persist user's authentication "session"
     const authsettings = Object.assign({}, _initial_authsettings)
     // This creates Web Cryptography API compliant JWK for sign/verify purposes
+    const b62 = USE('./base62');
     const keysToEcdsaJwk = (pub, d) => {  // d === priv
       //const [ x, y ] = Buffer.from(pub, 'base64').toString('utf8').split(':') // old
-      const [ x, y ] = pub.split('.') // new
-      var jwk = { kty: "EC", crv: "P-256", x: x, y: y, ext: true }
+      const xy = b62.pubToJwkXY(pub); // handles both old 87-char and new 88-char base62
+      var jwk = { kty: "EC", crv: "P-256", x: xy.x, y: xy.y, ext: true }
       jwk.key_ops = d ? ['sign'] : ['verify'];
       if(d){ jwk.d = d }
       return jwk;
@@ -319,10 +368,8 @@
         key.priv = (await shim.subtle.exportKey('jwk', keys.privateKey)).d;
         const pub = await shim.subtle.exportKey('jwk', keys.publicKey)
         //const pub = Buff.from([ x, y ].join(':')).toString('base64') // old
-        key.pub = pub.x+'.'+pub.y // new
-        // x and y are already base64
-        // pub is UTF8 but filename/URL safe (https://www.ietf.org/rfc/rfc3986.txt)
-        // but split on a non-base64 letter.
+        const b62 = USE('./base62');
+        key.pub = b62.b64ToB62(pub.x) + b62.b64ToB62(pub.y) // base62 format (88 chars)
         return key;
       })
       
@@ -338,10 +385,7 @@
         key.epriv = (await ecdhSubtle.exportKey('jwk', keys.privateKey)).d;
         const pub = await ecdhSubtle.exportKey('jwk', keys.publicKey)
         //const epub = Buff.from([ ex, ey ].join(':')).toString('base64') // old
-        key.epub = pub.x+'.'+pub.y // new
-        // ex and ey are already base64
-        // epub is UTF8 but filename/URL safe (https://www.ietf.org/rfc/rfc3986.txt)
-        // but split on a non-base64 letter.
+        key.epub = USE('./base62').b64ToB62(pub.x) + USE('./base62').b64ToB62(pub.y) // base62 format (88 chars)
         return key;
       })
       }catch(e){
@@ -563,13 +607,13 @@
 
     const keysToEcdhJwk = (pub, d) => { // d === priv
       //const [ x, y ] = Buffer.from(pub, 'base64').toString('utf8').split(':') // old
-      const [ x, y ] = pub.split('.') // new
+      const xy = USE('./base62').pubToJwkXY(pub); // handles both old 87-char and new 88-char base62
       const jwk = d ? { d: d } : {}
       return [  // Use with spread returned value...
         'jwk',
         Object.assign(
           jwk,
-          { x: x, y: y, kty: 'EC', crv: 'P-256', ext: true }
+          { x: xy.x, y: xy.y, kty: 'EC', crv: 'P-256', ext: true }
         ), // ??? refactor
         S.ecdh
       ]
@@ -603,9 +647,9 @@
     SEA.keyid = SEA.keyid || (async (pub) => {
       try {
         // base64('base64(x):base64(y)') => Buffer(xy)
+        const xy = USE('./base62').pubToJwkXY(pub);
         const pb = Buffer.concat(
-          pub.replace(/-/g, '+').replace(/_/g, '/').split('.')
-          .map((t) => Buffer.from(t, 'base64'))
+          [xy.x, xy.y].map((t) => Buffer.from(t.replace(/-/g,'+').replace(/_/g,'/'), 'base64'))
         )
         // id is PGPv4 compliant raw key
         const id = Buffer.concat([
@@ -1074,7 +1118,7 @@
           if('~@' === soul.slice(0,2)){ // special case for shared system data, the list of public keys for an alias.
             each.pubs(val, key, node, soul); return;
           }
-          if('~' === soul.slice(0,1) && 2 === (tmp = soul.slice(1)).split('.').length){ // special case, account data for a public key.
+          if('~' === soul.slice(0,1) && (tmp = relpub(soul))){ // special case, account data for a public key.
             each.pub(val, key, node, soul, tmp, msg.user); return;
           }
           each.any(val, key, node, soul, msg.user); return;
@@ -1125,6 +1169,9 @@
           if(!s){ return }
           s = s.split('~');
           if(!s || !(s = s[1])){ return }
+          // New 88-char base62 format (no dot separator)
+          if(/^[A-Za-z0-9]{88}/.test(s)){ return s.slice(0, 88) }
+          // Old 87-char base64url format (x.y)
           s = s.split('.');
           if(!s || 2 > s.length){ return }
           s = s.slice(0,2).join('.');

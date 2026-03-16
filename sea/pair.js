@@ -109,6 +109,13 @@
           throw new Error("Invalid base64 decoding: " + e.message);
         }
       };
+      // privToBI: parse priv/epriv accepting both old 43-char base64url and new 44-char base62
+      const privToBI = s => {
+        if (typeof s === 'string' && s.length === 44 && /^[A-Za-z0-9]{44}$/.test(s)) {
+          return b62.b62ToBI(s);
+        }
+        return b64ToBI(s); // backward compat: old base64url 43-char
+      };
       const biToB64 = n => {
         // Validate input is within valid range for P-256 (256 bits max)
         const max256bit = BigInt("0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
@@ -262,20 +269,20 @@
       if (opt.seed && (opt.priv || opt.epriv || opt.pub || opt.epub)) {
         r = {};
         if (opt.priv) {
-          const priv = ensurePrivRange(b64ToBI(opt.priv), 'Private key');
+          const priv = ensurePrivRange(privToBI(opt.priv), 'Private key');
           const signResult = await derivePrivWithRetry(priv, "SEA.DERIVE|sign|");
           const derivedPriv = signResult.derivedPriv;
           const derivedPub = pointMult(derivedPriv, G);
-          r.priv = biToB64(derivedPriv);
+          r.priv = b62.biToB62(derivedPriv);
           r.pub = pointToPub(derivedPub);
         }
         if (opt.epriv) {
-          const epriv = ensurePrivRange(b64ToBI(opt.epriv), 'Encryption private key');
+          const epriv = ensurePrivRange(privToBI(opt.epriv), 'Encryption private key');
           const encResult = await derivePrivWithRetry(epriv, "SEA.DERIVE|encrypt|");
           const derivedEpriv = encResult.derivedPriv;
           const derivedEpub = pointMult(derivedEpriv, G);
-          r.epriv = biToB64(derivedEpriv);
-          r.epub = pointToPub(derivedEpub); // pointToPub now outputs base62
+          r.epriv = b62.biToB62(derivedEpriv);
+          r.epub = pointToPub(derivedEpub);
         }
         if (opt.pub) {
           const pubPoint = parsePub(opt.pub);
@@ -288,17 +295,17 @@
           r.epub = pointToPub(derivedEpub);
         }
       } else if (opt.priv) {
-        const priv = ensurePrivRange(b64ToBI(opt.priv), 'Private key');
+        const priv = ensurePrivRange(privToBI(opt.priv), 'Private key');
         r = { priv: opt.priv, pub: pubFromPriv(priv) };
         if (opt.epriv) {
-          const epriv = ensurePrivRange(b64ToBI(opt.epriv), 'Encryption private key');
+          const epriv = ensurePrivRange(privToBI(opt.epriv), 'Encryption private key');
           r.epriv = opt.epriv;
           r.epub = pubFromPriv(epriv);
         } else {
           try {
             const dh = await ecdhSubtle.generateKey({name: 'ECDH', namedCurve: 'P-256'}, true, ['deriveKey'])
             .then(async k => ({ 
-              epriv: (await ecdhSubtle.exportKey('jwk', k.privateKey)).d,
+              epriv: b62.b64ToB62((await ecdhSubtle.exportKey('jwk', k.privateKey)).d),
               epub: b62.b64ToB62((await ecdhSubtle.exportKey('jwk', k.publicKey)).x) +
                     b62.b64ToB62((await ecdhSubtle.exportKey('jwk', k.publicKey)).y)
             }));
@@ -306,16 +313,16 @@
           } catch(e) {}
         }
       } else if (opt.epriv) {
-        const epriv = ensurePrivRange(b64ToBI(opt.epriv), 'Encryption private key');
+        const epriv = ensurePrivRange(privToBI(opt.epriv), 'Encryption private key');
         r = { epriv: opt.epriv, epub: pubFromPriv(epriv) };
         if (opt.priv) {
-          const priv = ensurePrivRange(b64ToBI(opt.priv), 'Private key');
+          const priv = ensurePrivRange(privToBI(opt.priv), 'Private key');
           r.priv = opt.priv;
           r.pub = pubFromPriv(priv);
         } else {
           const sa = await subtle.generateKey({name: 'ECDSA', namedCurve: 'P-256'}, true, ['sign', 'verify'])
           .then(async k => ({ 
-            priv: (await subtle.exportKey('jwk', k.privateKey)).d,
+            priv: b62.b64ToB62((await subtle.exportKey('jwk', k.privateKey)).d),
             pub: b62.b64ToB62((await subtle.exportKey('jwk', k.publicKey)).x) +
                  b62.b64ToB62((await subtle.exportKey('jwk', k.publicKey)).y)
           }));
@@ -325,13 +332,13 @@
         const signPriv = await seedToKey(opt.seed, "-sign");
         const encPriv = await seedToKey(opt.seed, "-encrypt");
         r = {
-          priv: biToB64(signPriv), pub: pubFromPriv(signPriv),
-          epriv: biToB64(encPriv), epub: pubFromPriv(encPriv)
+          priv: b62.biToB62(signPriv), pub: pubFromPriv(signPriv),
+          epriv: b62.biToB62(encPriv), epub: pubFromPriv(encPriv)
         };
       } else {
         const sa = await subtle.generateKey({name: 'ECDSA', namedCurve: 'P-256'}, true, ['sign', 'verify'])
         .then(async k => ({ 
-          priv: (await subtle.exportKey('jwk', k.privateKey)).d,
+          priv: b62.b64ToB62((await subtle.exportKey('jwk', k.privateKey)).d),
           pub: b62.b64ToB62((await subtle.exportKey('jwk', k.publicKey)).x) +
                b62.b64ToB62((await subtle.exportKey('jwk', k.publicKey)).y)
         }));
@@ -339,7 +346,7 @@
         try {
           const dh = await ecdhSubtle.generateKey({name: 'ECDH', namedCurve: 'P-256'}, true, ['deriveKey'])
           .then(async k => ({ 
-            epriv: (await ecdhSubtle.exportKey('jwk', k.privateKey)).d,
+            epriv: b62.b64ToB62((await ecdhSubtle.exportKey('jwk', k.privateKey)).d),
             epub: b62.b64ToB62((await ecdhSubtle.exportKey('jwk', k.publicKey)).x) +
                   b62.b64ToB62((await ecdhSubtle.exportKey('jwk', k.publicKey)).y)
           }));

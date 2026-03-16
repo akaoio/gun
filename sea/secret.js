@@ -37,10 +37,12 @@
     }});
 
     // can this be replaced with settings.jwk?
-    var keysToEcdhJwk = (pub, d) => { // d === priv
+    var keysToEcdhJwk = (pub, d) => { // d === epriv
       var xy = b62.pubToJwkXY(pub) // handles old (87) and new (88) format
       var x = xy.x, y = xy.y
-      var jwk = d ? { d: d } : {}
+      // Convert base62 epriv (44-char) back to base64url for WebCrypto JWK importKey
+      var dJwk = d ? ((d.length === 44 && /^[A-Za-z0-9]{44}$/.test(d)) ? b62.b62ToB64(d) : d) : undefined
+      var jwk = dJwk ? { d: dJwk } : {}
       return [  // Use with spread returned value...
         'jwk',
         Object.assign(
