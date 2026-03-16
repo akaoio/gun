@@ -1069,7 +1069,7 @@ describe('Gun', function(){
 
 	describe('API', function(){
 		var gopt = {wire:{put:function(n,cb){cb()},get:function(k,cb){cb()}}};
-		if(Gun.window && location.search){
+		if(((Gun.globalThis||{}).location||{}).search){
 			/*console.log("LOCALHOST PEER MUST BE ON!");
 			var peer = {url: 'http://localhost:8765/gun'};
 			Gun.on('opt', function(root){

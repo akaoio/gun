@@ -305,6 +305,7 @@ Gun.log = function(){ return (!Gun.log.off && C.log.apply(C, arguments)), [].sli
 Gun.log.once = function(w,s,o){ return (o = Gun.log.once)[w] = o[w] || 0, o[w]++ || Gun.log(s) };
 
 ((typeof globalThis !== "undefined" && typeof window === "undefined" && typeof WorkerGlobalScope !== "undefined") ? ((globalThis.GUN = globalThis.Gun = Gun).window = globalThis) : (typeof window !== "undefined" ? ((window.GUN = window.Gun = Gun).window = window) : undefined));
+((globalThis.GUN = globalThis.Gun = Gun).globalThis = globalThis);
 try{ if(typeof MODULE !== "undefined"){ MODULE.exports = Gun } }catch(e){}
 module.exports = Gun;
 
