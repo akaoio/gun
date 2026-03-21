@@ -28,48 +28,101 @@
     // This means we should ONLY trust our "friends" (our key ring) public keys, not any ones.
     // I have not yet added that to SEA yet in this alpha release. That is coming soon, but beware in the meanwhile!
 
-    function check(msg){ // REVISE / IMPROVE, NO NEED TO PASS MSG/EVE EACH SUB?
+    // --------------- Main dispatcher ---------------
+    function check(msg){
       var eve = this, at = eve.as, put = msg.put, soul = put['#'], key = put['.'], val = put[':'], state = put['>'], id = msg['#'], tmp;
       if(!soul || !key){ return }
+
+      // Faith fast-path — bypass all validation
       if((msg._||'').faith && (at.opt||'').faith && 'function' == typeof msg._){
-        SEA.opt.pack(put, function(raw){
-        SEA.verify(raw, false, function(data){ // this is synchronous if false
-          put['='] = SEA.opt.unpack(data);
-          eve.to.next(msg);
-        })})
-        return 
-      }
-      var no = function(why){ at.on('in', {'@': id, err: msg.err = why}) }; // exploit internal relay stun for now, maybe violates spec, but testing for now. // Note: this may be only the sharded message, not original batch.
-      //var no = function(why){ msg.ack(why) };
-      (msg._||'').DBG && ((msg._||'').DBG.c = +new Date);
-      if(0 <= soul.indexOf('<?')){ // special case for "do not sync data X old" forget
-        // 'a~pub.key/b<?9'
-        tmp = parseFloat(soul.split('<?')[1]||'');
-        if(tmp && (state < (Gun.state() - (tmp * 1000)))){ // sec to ms
-          (tmp = msg._) && (tmp.stun) && (tmp.stun--); // THIS IS BAD CODE! It assumes GUN internals do something that will probably change in future, but hacking in now.
-          return; // omit!
-        }
+        check.pipe.faith({ eve: eve, msg: msg, put: put, at: at }); return;
       }
 
-      if('~@' === soul){  // special case for shared system data, the list of aliases.
-        check.alias(eve, msg, val, key, soul, at, no); return;
+      var no = function(why){ at.on('in', {'@': id, err: msg.err = why}) };
+      (msg._||'').DBG && ((msg._||'').DBG.c = +new Date);
+
+      // Build context object shared across all stages
+      var ctx = { eve: eve, msg: msg, at: at, put: put, soul: soul, key: key, val: val, state: state, id: id, no: no, pub: null };
+
+      // Route: determine which feature stage to run after forget
+      var pipeline = [check.pipe.forget];
+
+      if('~@' === soul){
+        pipeline.push(check.pipe.alias);
+      } else if('~@' === soul.slice(0,2)){
+        pipeline.push(check.pipe.pubs);
+      } else if('~' === soul || '~/' === soul.slice(0,2)){
+        pipeline.push(check.pipe.shard);
+      } else if(tmp = SEA.opt.pub(soul)){
+        ctx.pub = tmp;
+        pipeline.push(check.pipe.pub);
+      } else if(0 <= soul.indexOf('#')){
+        pipeline.push(check.pipe.hash);
+      } else {
+        pipeline.push(check.pipe.any);
       }
-      if('~@' === soul.slice(0,2)){ // special case for shared system data, the list of public keys for an alias.
-        check.pubs(eve, msg, val, key, soul, at, no); return;
+
+      // Allow plugins to augment/reorder the pipeline
+      for(var pi = 0; pi < check.plugins.length; pi++){
+        check.plugins[pi](ctx, pipeline);
       }
-      if('~' === soul || '~/' === soul.slice(0,2)){
-        check.shard(eve, msg, val, key, soul, at, no, at.user||''); return;
-      }
-      //if('~' === soul.slice(0,1) && 2 === (tmp = soul.slice(1)).split('.').length){ // special case, account data for a public key.
-      if(tmp = SEA.opt.pub(soul)){ // special case, account data for a public key.
-        check.pub(eve, msg, val, key, soul, at, no, at.user||'', tmp); return;
-      }
-      if(0 <= soul.indexOf('#')){ // special case for content addressing immutable hashed data.
-        check.hash(eve, msg, val, key, soul, at, no); return;
-      } 
-      check.any(eve, msg, val, key, soul, at, no, at.user||''); return;
-      eve.to.next(msg); // not handled
+
+      check.run(pipeline, ctx);
     }
+    
+    // --------------- Pipeline runner ---------------
+    // Each stage is fn(ctx, next, reject) where:
+    //   next()       = advance to the next stage (or COMMIT if last)
+    //   reject(why)  = call no(why) and stop
+    // A stage that does NOT call next() or reject() must handle forwarding itself
+    // (e.g. stages that call eve.to.next(msg) directly).
+    check.run = function(stages, ctx) {
+      var i = 0;
+      var next = function() {
+        if (i >= stages.length) return; // all stages consumed, done
+        var stage = stages[i++];
+        try { stage(ctx, next, ctx.no); } catch(e) { ctx.no(e && e.message || String(e)); }
+      };
+      next();
+    };
+
+    // --------------- Pipeline stages (check.pipe.<name>) ---------------
+    // Each stage: fn(ctx, next, reject)
+    check.pipe = {
+      faith: function(ctx, next, reject) {
+        var eve = ctx.eve, msg = ctx.msg, put = ctx.put, at = ctx.at;
+        SEA.opt.pack(put, function(raw){
+          SEA.verify(raw, false, function(data){
+            put['='] = SEA.opt.unpack(data);
+            eve.to.next(msg);
+          });
+        });
+      },
+      forget: function(ctx, next, reject) {
+        var soul = ctx.soul, state = ctx.state, msg = ctx.msg, tmp;
+        if(0 <= soul.indexOf('<?')){
+          // 'a~pub.key/b<?9'
+          tmp = parseFloat(soul.split('<?')[1]||'');
+          if(tmp && (state < (Gun.state() - (tmp * 1000)))){ // sec to ms
+            (tmp = msg._) && (tmp.stun) && (tmp.stun--); // THIS IS BAD CODE! It assumes GUN internals do something that will probably change in future, but hacking in now.
+            return; // omit — do NOT call next()
+          }
+        }
+        next();
+      },
+      alias:  function(ctx, next, reject) { check.alias(ctx.eve, ctx.msg, ctx.val, ctx.key, ctx.soul, ctx.at, reject); },
+      pubs:   function(ctx, next, reject) { check.pubs(ctx.eve, ctx.msg, ctx.val, ctx.key, ctx.soul, ctx.at, reject); },
+      shard:  function(ctx, next, reject) { check.shard(ctx.eve, ctx.msg, ctx.val, ctx.key, ctx.soul, ctx.at, reject, ctx.at.user||''); },
+      pub:    function(ctx, next, reject) { check.pub(ctx.eve, ctx.msg, ctx.val, ctx.key, ctx.soul, ctx.at, reject, ctx.at.user||'', ctx.pub); },
+      hash:   function(ctx, next, reject) { check.hash(ctx.eve, ctx.msg, ctx.val, ctx.key, ctx.soul, ctx.at, reject); },
+      any:    function(ctx, next, reject) { check.any(ctx.eve, ctx.msg, ctx.val, ctx.key, ctx.soul, ctx.at, reject, ctx.at.user||''); }
+    };
+
+    // --------------- Plugin registry ---------------
+    // Plugins receive (ctx, pipeline) and may insert/reorder stages.
+    check.plugins = [];
+    check.use = function(fn) { check.plugins.push(fn); };
+
     // Verify content-addressed data matches its hash
     check.hash = function (eve, msg, val, key, soul, at, no, yes) {
       function base64ToHex(data) {
