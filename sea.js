@@ -1916,10 +1916,16 @@
         pipeline.push(check.pipe.any);
       }
 
+      // Keep reference to the required security stage before plugins can touch the array
+      var required = pipeline[1];
+
       // Allow plugins to augment/reorder the pipeline
       for(var pi = 0; pi < check.plugins.length; pi++){
         check.plugins[pi](ctx, pipeline);
       }
+
+      // Guard: ensure the routing security stage was not removed by a plugin
+      if(required && pipeline.indexOf(required) < 0){ return no("Security stage removed."); }
 
       check.run(pipeline, ctx);
     }
@@ -1931,11 +1937,14 @@
     // A stage that does NOT call next() or reject() must handle forwarding itself
     // (e.g. stages that call eve.to.next(msg) directly).
     check.run = function(stages, ctx) {
+      var no = ctx.no; // snapshot: prevent ctx.no mutation from bypassing rejection
       var i = 0;
       var next = function() {
         if (i >= stages.length) return; // all stages consumed, done
         var stage = stages[i++];
-        try { stage(ctx, next, ctx.no); } catch(e) { ctx.no(e && e.message || String(e)); }
+        var spent = false; // guard: each stage may advance the pipeline at most once
+        var once = function(){ if(!spent){ spent = true; next(); } };
+        try { stage(ctx, once, no); } catch(e) { no(e && e.message || String(e)); }
       };
       next();
     };
@@ -1972,8 +1981,11 @@
       any:    function(ctx, next, reject) { check.any(ctx.eve, ctx.msg, ctx.val, ctx.key, ctx.soul, ctx.at, reject, ctx.at.user||''); }
     };
 
+    Object.freeze(check.pipe); // prevent replacement of built-in security stages
+
     // --------------- Plugin registry ---------------
     // Plugins receive (ctx, pipeline) and may insert/reorder stages.
+    // NOTE: plugins cannot remove the routing security stage (validated in check()).
     check.plugins = [];
     check.use = function(fn) { check.plugins.push(fn); };
 
