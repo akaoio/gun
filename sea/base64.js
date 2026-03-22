@@ -2,8 +2,8 @@
 
     var u, root = (typeof globalThis !== "undefined") ? globalThis : (typeof global !== "undefined" ? global : (typeof window !== "undefined" ? window : this));
     var native = {}
-    native.btoa = (u+'' != typeof root.btoa) && root.btoa;
-    native.atob = (u+'' != typeof root.atob) && root.atob;
+    native.btoa = (u+'' != typeof root.btoa) && root.btoa && root.btoa.bind(root);
+    native.atob = (u+'' != typeof root.atob) && root.atob && root.atob.bind(root);
     if(u+'' == typeof Buffer){
       if(u+'' != typeof require){
         try{ root.Buffer = require("buffer", 1).Buffer }catch(e){ console.log("Please `npm install buffer` or add it to your package.json !") }
