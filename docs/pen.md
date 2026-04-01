@@ -107,14 +107,14 @@ function penunpack(s) {
 | `0x01` | `0x01` | true |
 | `0x02` | `0x02` | false |
 | `0x03` | `0x03 [u8 len][utf8...]` | string (max 255 bytes) |
-| `0x04` | `0x04 [u8]` | uint8 (0–255) |
-| `0x05` | `0x05 [u16be]` | uint16 (0–65535) |
-| `0x06` | `0x06 [u32be]` | uint32 |
-| `0x07` | `0x07 [i32be]` | int32 (âm) |
+| `0x04` | `0x04 [uleb128]` | unsigned integer (ULEB128 variable-length) |
+| `0x07` | `0x07 [sleb128]` | signed integer (SLEB128, dùng khi âm) |
 | `0x08` | `0x08 [f64be]` | float64 (IEEE 754) |
 
-> **Tối ưu kích thước:** constant nhỏ dùng uint8 (2 bytes), ul16 (3 bytes), tránh uint32 (5 bytes) khi không cần.
-> 300000 (candle 5 phút) cần uint32. Số 100, 2 (window range) dùng uint8 — tiết kiệm 3 bytes mỗi hằng số.
+> **Varint encoding (ULEB128):** mỗi byte đóng góp 7 bit, bit cao = 1 nếu còn byte tiếp theo.
+> - 0–127: **1 byte** (tiết kiệm 1 byte so với uint8 cũ).
+> - 300000: **3 bytes** `[0xE0, 0xA7, 0x12]` thay vì 5 bytes (uint32). Tiết kiệm 2 bytes.
+> Không còn `0x05` (uint16) và `0x06` (uint32) — varint thay thế hoàn toàn.
 
 ### 3.4 Register
 
@@ -235,13 +235,74 @@ LET(0, DIVU(R[4], INT32(300000)),    ← current candle
 | Range | Dùng cho |
 |-------|---------|
 | `0x00–0x7F` | PEN Core v1 (defined above) |
-| `0x80–0xBF` | PEN Core v2+ extensions |
+| `0x80–0x81` | SEGR / SEGRN macros (v1 optimization, xem §3.13) |
+| `0x82–0xBF` | PEN Core v2+ extensions |
 | `0xC0–0xDF` | Host extension opcodes (e.g., PoW hash, gun policy) |
 | `0xE0–0xEF` | Inline integer shortcuts: `0xE0` = 0, `0xE1` = 1 ... `0xEF` = 15 (optimization) |
-| `0xF0–0xFF` | Reserved |
+| `0xF0–0xFF` | Register shorthands (v1 optimization, xem §3.13) |
 
 > **Host extension opcodes** (0xC0..): cho phép host thêm opcode đặc thù. Ví dụ GUN layer thêm `0xC0` = SGN,
 > `0xC1` = CRT. PEN core throw "unknown opcode" nếu gặp — host callback xử lý extension.
+
+### 3.13 Optimization opcodes (v1)
+
+Ba tối ưu hóa được bổ sung vào ISA v1 để giảm kích thước bytecode mà không thay đổi ngữ nghĩa hay phức tạp hóa VM:
+
+#### Varint integers (`0x04`, `0x07`)
+
+Thay thế fixed-width types (uint8/uint16/uint32/int32) bằng variable-length encoding:
+
+| Giá trị | Fixed (cũ) | Varint (mới) | Tiết kiệm |
+|---------|-----------|-------------|----------|
+| 0–127 | `0x04 [1B]` = 2 bytes | `0x04 [1B]` = 2 bytes | 0 |
+| 300000 | `0x06 [4B]` = 5 bytes | `0x04 [3B]` = 4 bytes | **1 byte** |
+| âm số | `0x07 [4B]` = 5 bytes | `0x07 [1–2B]` | **2–3 bytes** |
+
+```
+ULEB128(300000):
+  byte 1: (300000 & 0x7F) | 0x80 = 0xE0  ← còn tiếp
+  byte 2: (300000 >> 7 & 0x7F) | 0x80 = 0xA7  ← còn tiếp
+  byte 3: (300000 >> 14) = 0x12  ← kết thúc
+  → [0xE0, 0xA7, 0x12]  (3 bytes thay vì 4)
+```
+
+#### Register shorthands (`0xF0–0xFF`)
+
+Mỗi `REG(n)` = `0x10 [u8]` = 2 bytes. Shorthand = **1 byte**. Thông thường 8–12 register refs mỗi bytecode → tiết kiệm 8–12 bytes.
+
+| Opcode | Tương đương | Giá trị |
+|--------|------------|---------|
+| `0xF0` | `REG(0)` | key |
+| `0xF1` | `REG(1)` | val |
+| `0xF2` | `REG(2)` | soul |
+| `0xF3` | `REG(3)` | state |
+| `0xF4` | `REG(4)` | now |
+| `0xF5` | `REG(5)` | pub |
+| `0xF8` | `REG(128)` | local[0] |
+| `0xF9` | `REG(129)` | local[1] |
+| `0xFA` | `REG(130)` | local[2] |
+| `0xFB` | `REG(131)` | local[3] |
+
+#### SEGR macros (`0x80–0x81`)
+
+Pattern `SEG(REG[r], sep, idx)` và `TONUM(SEG(...))` xuất hiện 3–5 lần mỗi bytecode. Macro hóa thành 4-byte inline instruction:
+
+| Opcode | Encoding | Tương đương | Từ → Đến |
+|--------|----------|------------|----------|
+| `0x80` | `0x80 [u8 reg][u8 sep][u8 idx]` | `SEG(REG[reg], sep, idx)` | 6 → 4 bytes |
+| `0x81` | `0x81 [u8 reg][u8 sep][u8 idx]` | `TONUM(SEG(REG[reg], sep, idx))` | 7 → 4 bytes |
+
+`sep` là raw ascii byte (ví dụ `'_'` = `0x5F`). `idx` là u8 (0–255).
+
+#### Tác động tổng hợp (ví dụ order bytecode)
+
+| Tối ưu | Tiết kiệm |
+|--------|-----------|
+| Varint (300000: 5→4 bytes) | ~1 byte |
+| Register shorthands (~10 refs) | ~10 bytes |
+| SEGR macros (3 uses: 6+7+6 → 4+4+4) | ~7 bytes |
+| **Tổng** | **~18 bytes** |
+| **Kết quả** | **75 → ~57 bytes → ~77 base62 chars** (giảm ~23%) |
 
 ---
 
@@ -421,10 +482,17 @@ pen.eval = function(bc, pos, regs, locals) {
         for (var i = 0; i < len; i++) s += String.fromCharCode(bc[pos.i++]);
         return s;
     }
-    if (op === 0x04) return bc[pos.i++];
-    if (op === 0x05) return (bc[pos.i++] << 8) | bc[pos.i++];
-    if (op === 0x06) return ((bc[pos.i++] << 24) | (bc[pos.i++] << 16) | (bc[pos.i++] << 8) | bc[pos.i++]) >>> 0;
-    if (op === 0x07) { var v = pen.eval.readI32(bc, pos); return v; }
+    if (op === 0x04) { // UINT varint (ULEB128)
+        var n = 0, shift = 0, b;
+        do { b = bc[pos.i++]; n |= (b & 0x7F) << shift; shift += 7; } while (b & 0x80);
+        return n >>> 0;
+    }
+    if (op === 0x07) { // INT varint (SLEB128)
+        var n = 0, shift = 0, b;
+        do { b = bc[pos.i++]; n |= (b & 0x7F) << shift; shift += 7; } while (b & 0x80);
+        if (shift < 32 && (b & 0x40)) n |= -(1 << shift);
+        return n;
+    }
     if (op === 0x08) { /* f64 from 8 bytes */
         var dv = new DataView(new ArrayBuffer(8));
         for (var i = 0; i < 8; i++) dv.setUint8(i, bc[pos.i++]);
@@ -437,6 +505,9 @@ pen.eval = function(bc, pos, regs, locals) {
         if (n >= 128) return locals[n - 128];
         return regs[n];
     }
+    // Register shorthands (0xF0–0xF5 = R[0]–R[5], 0xF8–0xFB = local[0]–local[3])
+    if (op >= 0xF0 && op <= 0xF5) return regs[op - 0xF0];
+    if (op >= 0xF8 && op <= 0xFB) return locals[op - 0xF8];
 
     // Logic
     if (op === 0x20) { // AND
@@ -532,6 +603,20 @@ pen.eval = function(bc, pos, regs, locals) {
         var then_ = pen.eval(bc, pos, regs, locals);
         var else_ = pen.eval(bc, pos, regs, locals);
         return cond ? then_ : else_;
+    }
+
+    // SEGR macros (0x80–0x81 optimization)
+    if (op === 0x80) { // SEG(REG[r], sep, idx) — 4 bytes inline
+        var r = bc[pos.i++], sep = String.fromCharCode(bc[pos.i++]), idx = bc[pos.i++];
+        var s = String(r < 128 ? regs[r] : locals[r - 128]);
+        var parts = s.split(sep);
+        return (idx < 0 ? parts[parts.length + idx] : parts[idx]) || '';
+    }
+    if (op === 0x81) { // TONUM(SEG(REG[r], sep, idx)) — 4 bytes inline
+        var r = bc[pos.i++], sep = String.fromCharCode(bc[pos.i++]), idx = bc[pos.i++];
+        var s = String(r < 128 ? regs[r] : locals[r - 128]);
+        var parts = s.split(sep);
+        return parseFloat((idx < 0 ? parts[parts.length + idx] : parts[idx]) || '0');
     }
 
     // Host extension
@@ -671,23 +756,23 @@ var orderSoul = '$' + sea.pen({
 ### 7.3 Bytecode trace (compact)
 
 ```
-version: 0x01
-AND(2)
-  LET(0, DIVU(REG[4], INT32(300000)),   // R[128] = current candle = floor(now/300000)
-    LET(1, TONUM(SEG(REG[0], '_', INT8(0))), // R[129] = candle_num from key
+version: 0x01                                              (1 byte)
+AND(2)                                                     (2 bytes)
+  LET(0, DIVU(0xF4, UINT(300000)),    // 0xF4=R[4], varint  [7 bytes, was 9]
+    LET(1, SEGRN(0, '_', 0),          // 0x81 macro          [4 bytes, was 8]
       AND(2,
-        GTE(REG[129], SUB(REG[128], INT8(100))),  // candle_key >= current - 100
-        LTE(REG[129], ADD(REG[128], INT8(2)))      // candle_key <= current + 2
+        GTE(0xF9, SUB(0xF8, UINT(100))), // 0xF9=R[129]       [6 bytes, was 11]
+        LTE(0xF9, ADD(0xF8, UINT(2)))    // 0xF8=R[128]       [5 bytes, was 10]
       )
     )
   )
   OR(2,
-    EQ(SEG(REG[0], '_', INT8(3)), STR("buy")),
-    EQ(SEG(REG[0], '_', INT8(3)), STR("sell"))
+    EQ(SEGR(0, '_', 3), STR("buy")),  // 0x80 macro          [7 bytes, was 10]
+    EQ(SEGR(0, '_', 3), STR("sell"))  //                     [8 bytes, was 11]
   )
-0xC0  (SGN policy)
+0xC0  (SGN policy)                                         (1 byte)
 
-Total: ~75 bytes → penpack → ~100 base62 chars
+Total: ~57 bytes → penpack → ~77 base62 chars  (was ~75 bytes → ~100 chars, -23%)
 ```
 
 ### 7.4 Discovery (không thay đổi — dùng LEX query của GUN)
