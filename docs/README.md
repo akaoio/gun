@@ -79,6 +79,80 @@ SEA.base62.pubToJwkXY(pub)        // accepts both 87-char and 88-char pub
 
 ---
 
+## 🔬 PEN — Predicate-Embedded Namespace (Binary VM)
+
+**Design doc: [PEN](./pen.md)**
+
+PEN is a **standalone embedded programming language** that compiles logic programs to the smallest
+possible base62 strings. Future plans: Zig port, separate `akaoio/pen` repo.
+
+### Layered Architecture
+
+```
+Tầng 2: Application (akao/shop) — order/trade schemas using sea.pen()
+Tầng 1: GUN-PEN Bridge (sea/pen.js) — register conventions, policy opcodes, sea.pen() compiler
+Tầng 0: PEN Core (lib/pen.js) — pure VM, no GUN, no timestamps, no network
+```
+
+**PEN Core** is environment-agnostic — it receives `(bytecode, registers[])` and returns a boolean.
+The GUN layer injects registers (R[0]=key, R[1]=val, R[4]=Date.now(), etc.) before calling the core.
+
+### Encoding
+
+```
+bytecode (N bytes)
+  → prepend 0x01 sentinel
+  → interpret as BigInt (big-endian)
+  → variable-length base62 — ceil((N+1)×8 / log₂62) chars
+  → soul = '$' + base62
+```
+
+No padding, no chunking. This is the theoretical lower bound for base62 encoding.
+
+### PEN Core ISA v1 — Generic Operations
+
+| Category | Opcodes |
+|----------|---------|
+| Constants | null, bool, uint8/16/32, int32, float64, string |
+| Register | REG(n) — host provides R[0..127], LET uses R[128..255] |
+| Logic | AND(n), OR(n), NOT, PASS, FAIL |
+| Comparison | EQ, NE, LT, GT, LTE, GTE |
+| Arithmetic | ADD, SUB, MUL, DIVU (floor div), MOD, DIVF, ABS, NEG |
+| String | LEN, SLICE, SEG (split+index), TONUM, TOSTR, CONCAT, PRE, SUF, INCLUDES, REGEX, UPPER, LOWER |
+| Type | ISS, ISN, ISX, ISB, LNG |
+| Binding | LET(n, def, body) — local variable binding |
+| Control | IF(cond, then, else) |
+
+No temporal, no PoW, no GUN-specific concepts in core.
+
+*Candle epoch, window validation, PoW — all expressible using generic arithmetic on host-injected registers.*
+
+### Temporal (Candle) — via arithmetic, not special opcodes
+
+Candle number = `Math.floor(timestamp_ms / size_ms)` — a small integer (~7 digits), not a 13-digit timestamp.
+
+```js
+// Helper in GUN bridge layer (not in PEN core):
+sea.candle({ seg: 0, sep: "_", size: 300000, back: 100, fwd: 2 })
+// Compiles to: LET(current_candle = DIVU(R[4], 300000),
+//               LET(key_candle = TONUM(SEG(R[0],'_',0)),
+//                 AND(GTE(key_candle, current-100), LTE(key_candle, current+2))))
+```
+
+### Host Extension Opcodes (GUN layer only, 0xC0–0xC4)
+
+`0xC0` = SGN (signature required), `0xC1` = CRT(pub), `0xC3` = NOA (open), `0xC4` = POW(difficulty).
+PEN core throws "unknown opcode" on these — GUN bridge handles them before/after core evaluation.
+
+### Size comparison
+
+| Schema | JSON-string | PEN Binary VM |
+|--------|-------------|---------------|
+| prefix + sign | ~48 chars | ~15 chars |
+| order with candle + window + direction + sign | ~288 chars | ~100 chars |
+
+---
+
 ## 📚 Feature Documentation
 
 ### 1. Seed-Based Key Generation
