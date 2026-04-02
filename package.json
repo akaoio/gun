@@ -23,7 +23,8 @@
     "buildSEA": "node lib/build.js sea",
     "unbuildSEA": "node lib/unbuild.js sea",
     "unbuildMeta": "node lib/unbuild.js lib/meta",
-    "buildPEN": "node -e \"require('fs').copyFileSync('node_modules/@akaoio/pen/pen.wasm','lib/pen.wasm')\""
+    "buildPEN": "node -e \"require('fs').copyFileSync('node_modules/@akaoio/pen/pen.wasm','lib/pen.wasm')\"",
+    "testPEN": "mocha test/pen.js --timeout 10000"
   },
   "repository": {
     "type": "git",

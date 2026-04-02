@@ -134,6 +134,7 @@
     // NOTE: plugins cannot remove the routing security stage (validated in check()).
     check.plugins = [];
     check.use = function(fn) { check.plugins.push(fn); };
+    SEA.check = check;
 
     // Verify content-addressed data matches its hash
     check.hash = function (eve, msg, val, key, soul, at, no, yes) {
