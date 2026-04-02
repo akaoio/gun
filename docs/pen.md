@@ -3,7 +3,7 @@
 > **PEN là một ngôn ngữ lập trình nhúng độc lập.**
 > Mục tiêu: sinh ra chuỗi base62 nhỏ nhất thế giới mã hóa logic tùy ý.
 > Core hoàn toàn không biết về môi trường xung quanh (không biết GUN, không biết time, không biết network).
-> Sẽ được port sang Zig và tách thành repo `akaoio/pen`.
+> Source: [`akaoio/pen`](https://github.com/akaoio/pen) — viết bằng Zig, compile ra `pen.wasm` (26KB, zero imports).
 
 ---
 
@@ -22,15 +22,17 @@
 │  - Xử lý policy opcodes: SGN, CRT, OWN, NOA         │
 │  - Biên dịch sea.pen(spec) → bytecode               │
 ├─────────────────────────────────────────────────────┤
-│  Tầng 0: PEN Core (lib/pen.js) — STANDALONE        │
+│  Tầng 0: PEN Core (lib/pen.wasm) — STANDALONE      │
+│  - Nguồn: akaoio/pen (Zig), compile ra WASM 26KB   │
 │  - Nhận: (bytecode, registers[])                    │
-│  - Trả về: boolean                                  │
+│  - Trả về: boolean / number / string                │
 │  - Không biết GUN, time, hay bất kỳ môi trường nào │
-│  - Opcodes: logic, arithmetic, string, type, LET    │
+│  - JS wrapper: node_modules/@akaoio/pen/pen.js      │
+│  - Copy vào lib/: npm run buildPEN                  │
 └─────────────────────────────────────────────────────┘
 ```
 
-**PEN Core** (`lib/pen.js`) là thứ duy nhất sẽ được port sang Zig. Các tầng trên là glue code JavaScript.
+**PEN Core** (`lib/pen.wasm`) là freestanding WASM binary, viết bằng Zig tại [`akaoio/pen`](https://github.com/akaoio/pen). Không có JS fallback — không cần thiết. Các tầng trên là glue code JavaScript.
 
 ---
 

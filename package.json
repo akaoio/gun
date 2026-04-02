@@ -15,14 +15,15 @@
     "prepublishOnly": "npm run build",
     "clean": "node -e \"['radata','data'].forEach(function(d){try{require('fs').rmSync(d,{recursive:true,force:true})}catch(e){}})\"",
     "test": "npm run clean && echo 'Did you run PANIC holy-grail, 1~X, on-recover, etc.?' && mocha",
-    "testSea": "npm run clean && mocha test/sea/sea.js",
+    "testSEA": "npm run clean && mocha test/sea/sea.js",
     "e2e": "mocha e2e/distributed.js",
     "docker": "hooks/build",
     "minify": "uglifyjs gun.js -o gun.min.js -c -m",
     "unbuild": "node lib/unbuild.js & npm run minify",
-    "buildSea": "node lib/build.js sea",
-    "unbuildSea": "node lib/unbuild.js sea",
-    "unbuildMeta": "node lib/unbuild.js lib/meta"
+    "buildSEA": "node lib/build.js sea",
+    "unbuildSEA": "node lib/unbuild.js sea",
+    "unbuildMeta": "node lib/unbuild.js lib/meta",
+    "buildPEN": "node -e \"require('fs').copyFileSync('node_modules/@akaoio/pen/pen.wasm','lib/pen.wasm')\""
   },
   "repository": {
     "type": "git",
@@ -68,6 +69,7 @@
     "@peculiar/webcrypto": "^1.5.0"
   },
   "devDependencies": {
+    "@akaoio/pen": "github:akaoio/pen",
     "aws-sdk": "^2.528.0",
     "emailjs": "^2.2.0",
     "ip": "^1.1.5",
