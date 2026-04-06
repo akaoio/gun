@@ -298,13 +298,42 @@ describe('SEA.pen()', function() {
     assert.strictEqual(pen.scanpolicy(bc).open, true);
   });
 
-  it('{ pow: { field:1, difficulty:3 } } emits 0xC4 + field + diff', function() {
+  it('{ pow: { field:1, difficulty:3 } } emits 0xC4 + field + diff, unit defaults to "0"', function() {
     var soul = SEA.pen({ pow: { field: 1, difficulty: 3 } });
     var bc = pen.unpack(soul.slice(1));
     var p = pen.scanpolicy(bc);
     assert.ok(p.pow);
     assert.strictEqual(p.pow.field, 1);
     assert.strictEqual(p.pow.difficulty, 3);
+    assert.strictEqual(p.pow.unit, '0', 'unit defaults to "0" when not specified');
+  });
+
+  it('{ pow: { unit: "asdf", difficulty: 2 } } unit and difficulty round-trip', function() {
+    var soul = SEA.pen({ pow: { field: 0, unit: 'asdf', difficulty: 2 } });
+    var bc = pen.unpack(soul.slice(1));
+    var p = pen.scanpolicy(bc);
+    assert.ok(p.pow);
+    assert.strictEqual(p.pow.unit, 'asdf');
+    assert.strictEqual(p.pow.difficulty, 2);
+    assert.strictEqual(p.pow.field, 0);
+  });
+
+  it('{ pow: { unit: "abc" } } difficulty defaults to 1', function() {
+    var soul = SEA.pen({ pow: { field: 0, unit: 'abc' } });
+    var bc = pen.unpack(soul.slice(1));
+    var p = pen.scanpolicy(bc);
+    assert.ok(p.pow);
+    assert.strictEqual(p.pow.unit, 'abc');
+    assert.strictEqual(p.pow.difficulty, 1, 'difficulty defaults to 1 when not specified');
+  });
+
+  it('{ pow: { difficulty: 2 } } unit defaults to "0"', function() {
+    var soul = SEA.pen({ pow: { field: 0, difficulty: 2 } });
+    var bc = pen.unpack(soul.slice(1));
+    var p = pen.scanpolicy(bc);
+    assert.ok(p.pow);
+    assert.strictEqual(p.pow.unit, '0', 'unit defaults to "0" when omitted');
+    assert.strictEqual(p.pow.difficulty, 2);
   });
 
   it('sign + predicate: policy detected without polluting tree', function() {
@@ -505,13 +534,14 @@ describe('penStage (mocked pipeline)', function() {
     done();
   });
 
-  it('pow policy: field and difficulty correctly extracted', function(done) {
+  it('pow policy: field, difficulty, and unit correctly extracted', function(done) {
     var soul = SEA.pen({ pow: { field: 1, difficulty: 4 } });
     var bc = pen.unpack(soul.slice(1));
     var policy = pen.scanpolicy(bc);
     assert.ok(policy.pow);
     assert.strictEqual(policy.pow.field, 1);
     assert.strictEqual(policy.pow.difficulty, 4);
+    assert.strictEqual(policy.pow.unit, '0', 'unit defaults to "0"');
     done();
   });
 
@@ -721,6 +751,33 @@ describe('SEA + PEN integration', function() {
       assert.strictEqual(pen.run(bc, [stale, signed, soul, 0, now, pair.pub]), false, 'stale candle blocked');
       done();
     });
+  });
+
+  it('pow unit:"a" difficulty:1 — SEA.work hash must start with "a"', function(done) {
+    this.timeout(30000);
+    var unit = 'a';
+    var difficulty = 1;
+    var prefix = unit.repeat(difficulty); // 'a'
+    var soul = SEA.pen({ pow: { field: 1, unit: unit, difficulty: difficulty } });
+    var bc = pen.unpack(soul.slice(1));
+    var policy = pen.scanpolicy(bc);
+    assert.strictEqual(policy.pow.unit, unit);
+    assert.strictEqual(policy.pow.difficulty, difficulty);
+
+    var tries = 0;
+    function seek(n) {
+      tries++;
+      if (tries > 500) return done(new Error('could not find PoW solution in 500 tries'));
+      var val = 'test_data_nonce' + n;
+      SEA.work(val, null, function(hash) {
+        if (hash && hash.slice(0, prefix.length) === prefix) {
+          assert.ok(hash.startsWith(prefix), 'hash satisfies unit.repeat(difficulty)');
+          assert.ok(pen.run(bc, ['k', val, soul, 0, Date.now(), '']), 'predicate passes (PASS, no constraint)');
+          done();
+        } else { seek(n + 1); }
+      }, { name: 'SHA-256', encode: 'hex' });
+    }
+    seek(0);
   });
 
   it('order namespace: SEA.work PoW + candle — hostile nonce cannot fake PoW', function(done) {
