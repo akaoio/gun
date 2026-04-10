@@ -266,6 +266,52 @@ describe('SEA.pen()', function() {
     assert.strictEqual(pen.run(bc, ['bar',        'v', soul, 0, Date.now(), '']), false);
   });
 
+  it('{ path: "exact" } enforces exact path match', function() {
+    var soul = SEA.pen({ path: 'exact-path' });
+    var bc = pen.unpack(soul.slice(1));
+    var regs = function(p) { return ['k', 'v', soul, 0, Date.now(), '', p]; };
+    assert.strictEqual(pen.run(bc, regs('exact-path')), true);
+    assert.strictEqual(pen.run(bc, regs('other-path')), false);
+    assert.strictEqual(pen.run(bc, regs('')),           false);
+  });
+
+  it('{ path: { pre: "usr/" } } checks path prefix', function() {
+    var soul = SEA.pen({ path: { pre: 'usr/' } });
+    var bc = pen.unpack(soul.slice(1));
+    var regs = function(p) { return ['k', 'v', soul, 0, Date.now(), '', p]; };
+    assert.strictEqual(pen.run(bc, regs('usr/alice')),  true);
+    assert.strictEqual(pen.run(bc, regs('usr/')),       true);
+    assert.strictEqual(pen.run(bc, regs('admin/alice')), false);
+  });
+
+  it('{ path: { type: "string" } } accepts non-empty path, rejects missing path', function() {
+    var soul = SEA.pen({ path: { type: 'string' } });
+    var bc = pen.unpack(soul.slice(1));
+    assert.strictEqual(pen.run(bc, ['k', 'v', soul, 0, Date.now(), '', 'some/path']), true);
+    assert.strictEqual(pen.run(bc, ['k', 'v', soul, 0, Date.now(), '', '']),          true);  // empty string is still string
+    assert.strictEqual(pen.run(bc, ['k', 'v', soul, 0, Date.now(), '', null]),        false);
+  });
+
+  it('path + key + val: all three combine with AND', function() {
+    var soul = SEA.pen({
+      key:  { type: 'string' },
+      val:  { type: 'number' },
+      path: { pre: 'ns/' }
+    });
+    var bc = pen.unpack(soul.slice(1));
+    assert.strictEqual(pen.run(bc, ['k', 42,    soul, 0, Date.now(), '', 'ns/foo']),  true,  'all match');
+    assert.strictEqual(pen.run(bc, ['k', 'str', soul, 0, Date.now(), '', 'ns/foo']),  false, 'val wrong type');
+    assert.strictEqual(pen.run(bc, ['k', 42,    soul, 0, Date.now(), '', 'other/']),  false, 'path wrong prefix');
+  });
+
+  it('path seg: validate first segment of path', function() {
+    var soul = SEA.pen({ path: { seg: { sep: '/', idx: 0, match: { pre: 'user-' } } } });
+    var bc = pen.unpack(soul.slice(1));
+    var regs = function(p) { return ['k', 'v', soul, 0, Date.now(), '', p]; };
+    assert.strictEqual(pen.run(bc, regs('user-123/data')), true);
+    assert.strictEqual(pen.run(bc, regs('admin-1/data')), false);
+  });
+
   it('multiple fields combine with AND', function() {
     var soul = SEA.pen({ key: { type: 'string' }, val: { type: 'number' } });
     var bc = pen.unpack(soul.slice(1));
@@ -505,6 +551,33 @@ describe('penStage (mocked pipeline)', function() {
     var bc = pen.unpack(soul.slice(1));
     var regs = ['k', 'valid', soul, 0, Date.now(), ''];
     assert.strictEqual(pen.run(bc, regs), true);
+    done();
+  });
+
+  it('soul with path: penStage extracts path after first / into R[6]', function(done) {
+    var soul = SEA.pen({ path: { pre: 'usr/' } });
+    // Simulate soul with path: '$pencode/usr/alice'
+    var soulWithPath = soul + '/usr/alice';
+    var slashIdx = soulWithPath.indexOf('/');
+    var pencode = soulWithPath.slice(1, slashIdx);
+    var pathpart = soulWithPath.slice(slashIdx + 1);  // 'usr/alice'
+    var bc = pen.unpack(pencode);
+    var regs = ['k', 'v', soulWithPath, 0, Date.now(), '', pathpart];
+    assert.strictEqual(pen.run(bc, regs), true,  'path prefix "usr/" accepted');
+
+    var regsWrong = ['k', 'v', soulWithPath, 0, Date.now(), '', 'admin/alice'];
+    assert.strictEqual(pen.run(bc, regsWrong), false, 'wrong path prefix rejected');
+    done();
+  });
+
+  it('soul without path: path R[6] defaults to empty string', function(done) {
+    var soul = SEA.pen({ key: 'mykey' });
+    // No slash in soul — path should be ''
+    var pencode = soul.slice(1);
+    var pathpart = '';
+    var bc = pen.unpack(pencode);
+    var regs = ['mykey', 'v', soul, 0, Date.now(), '', pathpart];
+    assert.strictEqual(pen.run(bc, regs), true, 'no-path soul still passes key predicate');
     done();
   });
 
