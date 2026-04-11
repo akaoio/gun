@@ -15,7 +15,14 @@ var json = JSON.stringifyAsync || function(v,cb,r,s){ var u; try{ cb(u, JSON.str
 Gun.on('create', function lg(root){
 	this.to.next(root);
 	var opt = root.opt, graph = root.graph, acks = [], disk, to, size, stop;
-	if(false === opt.localStorage){ return }
+	if(false === opt.localStorage){
+		// Memory-only mode: no disk writes but still ack puts so callbacks fire.
+		root.on('put', function(msg){
+			this.to.next(msg);
+			if(!msg['@']){ root.on('in', {'@': msg['#'], ok: 1}) }
+		});
+		return;
+	}
 	opt.prefix = opt.file || 'gun/';
 	try{ disk = lg[opt.prefix] = lg[opt.prefix] || JSON.parse(size = store.getItem(opt.prefix)) || {}; // TODO: Perf! This will block, should we care, since limited to 5MB anyways?
 	}catch(e){ disk = lg[opt.prefix] = {}; }
