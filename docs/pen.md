@@ -701,7 +701,7 @@ gun.get(orderSoul).get({ '>': candle + '_ETH_USDT_buy', '<': candle + '_ETH_USDT
 | 1 | `lib/pen.js` | WASM loader (`pen.ready`/`pen.run`/`pen.bc`) + compiler (`pen.pack`/`pen.unpack`) | ✅ |
 | 2 | `lib/pen.js` | `pen.scanpolicy` (treeskip-based) + `penStage` + `applypolicy` | ✅ |
 | 3 | `sea/index.js` | `SEA.check.use(penStage)`, routing `'$' === soul[0]` | ✅ |
-| 4 | `sea.js` | Rebuild: `npm run unbuildSea` | ✅ |
+| 4 | `sea.js` | Rebuild: `npm run buildSEA` | ✅ |
 | 5 | `test/pen.js` | 52 tests: ISA, LET, candle, policy, adversarial | ✅ |
 
 > `lib/pen.js` là file **độc lập hoàn toàn** — WASM loader + compiler + penStage trong 1 file.

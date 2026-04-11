@@ -53,11 +53,13 @@ npm install -g mocha
 npm test
 
 # Run SEA tests specifically
-npm run testSea
+npm run testSEA
 
 # Build browser bundles
-npm run unbuild      # Build gun.js and gun.min.js
-npm run unbuildSea   # Build sea.js
+npm run buildGUN     # Build gun.js and gun.min.js from /src
+npm run unbuildGUN   # Extract gun.js back into /src
+npm run buildSEA     # Build sea.js from /sea
+npm run unbuildSEA   # Extract sea.js back into /sea
 
 # Docker
 npm run docker       # Build Docker image
@@ -99,6 +101,6 @@ For performance and stress testing:
 
 When modifying GUN:
 1. Core logic is in `/src` - modifications here affect all builds
-2. Run `npm run unbuild` after changes to regenerate browser builds
+2. Run `npm run buildGUN` after changes to regenerate browser builds
 3. Test changes with both Node.js and browser environments
 4. The codebase uses a custom module system (USE function) for bundling

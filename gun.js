@@ -1,6 +1,7 @@
 ;(function(){
 
   /* UNBUILD */
+
   function USE(arg, req){
     return req? require(arg) : arg.slice? USE[R(arg)] : function(mod, path){
       arg(mod = {exports: {}});
@@ -41,15 +42,15 @@
 		}
 		String.hash = function(s, c){ // via SO
 			if(typeof s !== 'string'){ return }
-	    c = c || 0; // CPU schedule hashing by
-	    if(!s.length){ return c }
-	    for(var i=0,l=s.length,n; i<l; ++i){
-	      n = s.charCodeAt(i);
-	      c = ((c<<5)-c)+n;
-	      c |= 0;
-	    }
-	    return c;
-	  }
+			    c = c || 0; // CPU schedule hashing by
+			    if(!s.length){ return c }
+			    for(var i=0,l=s.length,n; i<l; ++i){
+			      n = s.charCodeAt(i);
+			      c = ((c<<5)-c)+n;
+			      c |= 0;
+			    }
+			    return c;
+			  }
 		var has = Object.prototype.hasOwnProperty;
 		Object.plain = function(o){ return o? (o instanceof Object && o.constructor === Object) || Object.prototype.toString.call(o).match(/^\[object (\w+)\]$/)[1] === 'Object' : false }
 		Object.empty = function(o, n){
@@ -458,7 +459,6 @@
 	})(USE, './ask');
 
 	;USE(function(module){
-
 		function Gun(o){
 			if(o instanceof Gun){ return (this._ = {$: this}).$ }
 			if(!(this instanceof Gun)){ return new Gun(o) }
@@ -578,7 +578,7 @@
 			function ham(val, key, soul, state, msg){
 				var ctx = msg._||'', root = ctx.root, graph = root.graph, lot, tmp;
 				var vertex = graph[soul] || empty, was = state_is(vertex, key, 1), known = vertex[key];
-				
+
 				var DBG = ctx.DBG; if(tmp = console.STAT){ if(!graph[soul] || !known){ tmp.has = (tmp.has || 0) + 1 } }
 
 				var now = State(), u;
@@ -602,9 +602,9 @@
 			}
 			function map(msg){
 				var DBG; if(DBG = (msg._||'').DBG){ DBG.pa = +new Date; DBG.pm = DBG.pm || +new Date}
-      	var eve = this, root = eve.as, graph = root.graph, ctx = msg._, put = msg.put, soul = put['#'], key = put['.'], val = put[':'], state = put['>'], id = msg['#'], tmp;
-      	if((tmp = ctx.msg) && (tmp = tmp.put) && (tmp = tmp[soul])){ state_ify(tmp, key, state, val, soul) } // necessary! or else out messages do not get SEA transforms.
-      	//var bytes = ((graph[soul]||'')[key]||'').length||1;
+		      	var eve = this, root = eve.as, graph = root.graph, ctx = msg._, put = msg.put, soul = put['#'], key = put['.'], val = put[':'], state = put['>'], id = msg['#'], tmp;
+		      	if((tmp = ctx.msg) && (tmp = tmp.put) && (tmp = tmp[soul])){ state_ify(tmp, key, state, val, soul) } // necessary! or else out messages do not get SEA transforms.
+		      	//var bytes = ((graph[soul]||'')[key]||'').length||1;
 				graph[soul] = state_ify(graph[soul], key, state, val, soul);
 				if(tmp = (root.next||'')[soul]){
 					//tmp.bytes = (tmp.bytes||0) + ((val||'').length||1) - bytes;
@@ -766,7 +766,7 @@
 		((globalThis.GUN = globalThis.Gun = Gun).globalThis = globalThis);
 		try{ if(typeof MODULE !== "undefined"){ MODULE.exports = Gun } }catch(e){}
 		module.exports = Gun;
-		
+
 		(Gun.window||{}).console = (Gun.window||{}).console || {log: function(){}};
 		(C = console).only = function(i, s){ return (C.only.i && i === C.only.i && C.only.i++) && (C.log.apply(C, arguments) || s) };
 	})(USE, './root');
@@ -1373,7 +1373,7 @@
 				as.via = at.root.$.get(((as.data||'')._||'')['#'] || at.$.back('opt.uuid')())
 			}
 			as.via.put(as.data, as.ack, as);
-			
+
 
 			return;
 			if(at.get && at.back.soul){
@@ -1652,7 +1652,7 @@
 					/*if('string' == typeof raw){ try{
 						var stat = console.STAT || {};
 						//console.log('HEAR:', peer.id, (raw||'').slice(0,250), ((raw||'').length / 1024 / 1024).toFixed(4));
-						
+
 						//console.log(setTimeout.turn.s.length, 'stacks', parseFloat((-(LT - (LT = +new Date))/1000).toFixed(3)), 'sec', parseFloat(((LT-ST)/1000 / 60).toFixed(1)), 'up', stat.peers||0, 'peers', stat.has||0, 'has', stat.memhused||0, stat.memused||0, stat.memax||0, 'heap mem max');
 					}catch(e){ console.log('DBG err', e) }}*/
 					hear.d += raw.length||0 ; ++hear.c } // STATS!
@@ -1752,7 +1752,7 @@
 					if((tmp = this) && (tmp = tmp.to) && tmp.next){ tmp.next(msg) } // compatible with middleware adapters.
 					if(!msg){ return false }
 					var id, hash, raw, ack = msg['@'];
-//if(opt.super && (!ack || !msg.put)){ return } // TODO: MANHATTAN STUB //OBVIOUSLY BUG! But squelch relay. // :( get only is 100%+ CPU usage :(
+		//if(opt.super && (!ack || !msg.put)){ return } // TODO: MANHATTAN STUB //OBVIOUSLY BUG! But squelch relay. // :( get only is 100%+ CPU usage :(
 					var meta = msg._||(msg._=function(){});
 					var DBG = msg.DBG, S = +new Date; meta.y = meta.y || S; if(!peer){ DBG && (DBG.y = S) }
 					if(!(id = msg['#'])){ id = msg['#'] = String.random(9) }
@@ -1970,10 +1970,9 @@
 
 			return mesh;
 		}
-	  var empty = {}, ok = true, u;
+			  var empty = {}, ok = true, u;
 
-	  try{ module.exports = Mesh }catch(e){}
-
+			  try{ module.exports = Mesh }catch(e){}
 	})(USE, './mesh');
 
 	;USE(function(module){
@@ -2108,7 +2107,7 @@
 					},0,99);
 				})
 			}
-		
+
 		});
 	})(USE, './localStorage');
 

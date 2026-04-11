@@ -11,7 +11,7 @@ GUN uses a **custom bundler** called "USE" (not CommonJS/ESM directly):
 - All modules wrapped in `USE(function(module){ ... }, './path')` pattern
 - Bundler processes `/* UNBUILD */` comments to generate browser builds
 - Source files in `/src`, bundled output in `gun.js` and `gun.min.js`
-- After modifying `/src` files, **always run** `npm run unbuild` to regenerate builds
+- After modifying `/src` files, **always run** `npm run buildGUN` to regenerate builds
 
 ### Entry Points
 - `index.js` → Node.js (loads `lib/server.js`)
@@ -37,15 +37,17 @@ GUN uses a **custom bundler** called "USE" (not CommonJS/ESM directly):
 
 ### Build & Test
 ```bash
-npm run unbuild        # Rebuild gun.js after /src changes (CRITICAL)
-npm run unbuildSea     # Rebuild sea.js after /sea changes
+npm run buildGUN       # Build gun.js after /src changes (CRITICAL)
+npm run unbuildGUN     # Extract gun.js back into /src
+npm run buildSEA       # Build sea.js after /sea changes
+npm run unbuildSEA     # Extract sea.js back into /sea
 npm start              # Start dev server with examples on localhost
 npm run https          # Start with HTTPS (required for WebCrypto/SEA)
 
 # Testing - ALWAYS clean data between test runs
 rm -rf *data* *radata*
 npm test               # Requires global mocha: npm install -g mocha
-npm run testSea        # SEA-specific tests
+npm run testSEA        # SEA-specific tests
 ```
 
 ### PANIC Tests (Performance & Stress Testing)
@@ -105,7 +107,7 @@ Located in `/sea`, extends GUN with cryptographic operations:
 
 ## Common Pitfalls
 
-1. **Forgotten Unbuild**: Changes to `/src/*.js` don't affect browser until `npm run unbuild`
+1. **Forgotten Build**: Changes to `/src/*.js` don't affect browser until `npm run buildGUN`
 2. **Test Data Pollution**: ALWAYS `rm -rf *data* *radata*` between test runs
 3. **Circular References**: GUN supports them natively - don't try to "fix" them
 4. **Async Everywhere**: All storage/network ops are async, use callbacks/promises
@@ -151,4 +153,4 @@ See `/docs` for enterprise features:
 
 ---
 **Before major changes**: Run `test/panic/holy-grail.js` to validate correctness.
-**After any change**: `npm run unbuild && rm -rf *data* && npm test`
+**After any change**: `npm run buildGUN && rm -rf *data* && npm test`

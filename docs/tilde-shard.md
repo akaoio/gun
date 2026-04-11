@@ -209,6 +209,6 @@ Current SEA tests (77 passing) include shard checks for:
 Run:
 
 ```bash
-npm run buildSea
-npm run testSea
+npm run buildSEA
+npm run testSEA
 ```
