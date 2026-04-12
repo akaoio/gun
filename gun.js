@@ -63,7 +63,7 @@
 			return l;
 		}
 		;(function(){
-			var u, sT = setTimeout, l = 0, c = 0
+			var u, sT = setTimeout, l = 0, c = 0, d = 0
 			, sI = (typeof setImmediate !== ''+u && setImmediate) || (function(c,f){
 				if(typeof MessageChannel == ''+u){ return sT }
 				(c = new MessageChannel()).port1.onmessage = function(e){ ''==e.data && f() }
@@ -71,9 +71,15 @@
 			}()), check = sT.check = sT.check || (typeof performance !== ''+u && performance)
 			|| {now: function(){ return +new Date }};
 			sT.hold = sT.hold || 9; // half a frame benchmarks faster than < 1ms?
+			function soon(f){ sI(function(){ l = check.now(); f() },c=0) }
 			sT.poll = sT.poll || function(f){
-				if((sT.hold >= (check.now() - l)) && c++ < 3333){ f(); return }
-				sI(function(){ l = check.now(); f() },c=0)
+				if(d){ soon(f); return }
+				if((sT.hold >= (check.now() - l)) && c++ < 3333){
+					++d;
+					try{ f() } finally { --d }
+					return
+				}
+				soon(f)
 			}
 		}());
 		;(function(){ // Too many polls block, this "threads" them in turns over a single thread in time.

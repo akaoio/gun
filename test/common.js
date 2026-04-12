@@ -196,6 +196,23 @@ describe('Gun', function(){
 			});
 			*/
 		});
+		describe('Scheduler', function(){
+			it('nested poll yields instead of recursing synchronously', function(done){
+				var now = setTimeout.check.now, order = [];
+				setTimeout.check.now = function(){ return 0 }
+				setTimeout.poll(function(){
+					order.push('outer-start');
+					setTimeout.poll(function(){ order.push('inner') });
+					order.push('outer-end');
+				});
+				expect(order).to.eql(['outer-start', 'outer-end']);
+				setTimeout(function(){
+					setTimeout.check.now = now;
+					expect(order).to.eql(['outer-start', 'outer-end', 'inner']);
+					done();
+				}, 20);
+			});
+		});
 		describe('On', function(){
 			it('subscribe', function(done){
 				var e = {on: Gun.on};
