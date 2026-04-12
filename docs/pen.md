@@ -319,7 +319,7 @@ Pattern `SEG(REG[r], sep, idx)` và `TONUM(SEG(...))` xuất hiện 3–5 lần 
 | R[2] | soul | string |
 | R[3] | HAM state timestamp (ms) | number |
 | R[4] | Date.now() — inject bởi GUN layer | number |
-| R[5] | writer pub (nếu có) | string |
+| R[5] | writer pub từ authenticated user hoặc `opt.authenticator.pub` | string |
 
 R[4] là `Date.now()` — host inject mỗi lần validate. PEN bytecode tự tính candle number từ R[4] bằng DIVU.
 
@@ -633,6 +633,7 @@ function penStage(ctx, next, reject) {
 
   // 3. Build registers
   // R[0]=key  R[1]=val (raw)  R[2]=soul  R[3]=state  R[4]=now  R[5]=writer pub
+  // R[5] ưu tiên sec.upub, fallback sang sec.authenticator.pub để shared PEN souls
   var regs = [
     ctx.key, ctx.val, soul,
     ctx.state || 0, Date.now(),

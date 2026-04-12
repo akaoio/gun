@@ -960,4 +960,44 @@ describe('SEA + PEN integration', function() {
     });
   });
 
+  it('GUN shared PEN soul: authenticator pub is available in R[5] during predicate evaluation', function(done) {
+    this.timeout(10000);
+    var now = Date.now();
+    var size = 300000;
+    var candle = Math.floor(now / size);
+    var soul = SEA.pen({
+      key: { and: [
+        {
+          let: {
+            bind: 0,
+            def: { divu: [{ tonum: { seg: { sep: ':', idx: 0, of: { reg: 0 } } } }, size] },
+            body: { and: [
+              { gte: [{ reg: 128 }, candle] },
+              { lte: [{ reg: 128 }, candle] }
+            ]}
+          }
+        },
+        { eq: [
+          { seg: { sep: ':', idx: 1, of: { reg: 0 } } },
+          { reg: 5 }
+        ]},
+        { seg: { sep: ':', idx: 2, of: { reg: 0 }, match: { length: [1, 64] } } }
+      ]},
+      val: { type: 'string' },
+      sign: true,
+      params: { item: 'tea', type: 'buy', candle: candle }
+    });
+    var gun = Gun({ radisk: false, peers: [], localStorage: false });
+    var key = now + ':' + pair.pub + ':nonce1';
+    SEA.sign('shared_order', pair, function(value) {
+      gun.get(soul).get(key).put(value, function(ack) {
+        if (ack && ack.err) return done(new Error(ack.err));
+        gun.get(soul).get(key).once(function(v) {
+          assert.strictEqual(v, value, 'shared PEN write round-trips with authenticator pub in R[5]');
+          done();
+        });
+      }, { opt: { authenticator: pair } });
+    });
+  });
+
 });
