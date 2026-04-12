@@ -90,6 +90,13 @@ describe('pen.run — ISA', function() {
     assert.strictEqual(run(prog(bc.eq(bc.r0(), bc.str('mykey'))), ['other']), false);
   });
 
+  it('EQ supports comparing two dynamic expressions', function() {
+    var bc = pen.bc;
+    var bytecode = prog(bc.eq(bc.seg(bc.r0(), ':', bc.intn(1)), bc.r5()));
+    assert.strictEqual(run(bytecode, ['123:writerpub:nonce', '', '', 0, Date.now(), 'writerpub']), true);
+    assert.strictEqual(run(bytecode, ['123:otherpub:nonce', '', '', 0, Date.now(), 'writerpub']), false);
+  });
+
   it('PRE (startsWith)', function() {
     var bc = pen.bc;
     assert.strictEqual(run(prog(bc.pre(bc.r0(), bc.str('foo'))), ['foobar']), true);
@@ -382,6 +389,29 @@ describe('SEA.pen()', function() {
     assert.strictEqual(p.pow.difficulty, 2);
   });
 
+  it('{ params } salts soul identity and round-trips through scanpolicy', function() {
+    var soul = SEA.pen({
+      val: { type: 'string' },
+      params: { item: 'organic-green-tea', type: 'buy', candle: 5820000 }
+    });
+    var bc = pen.unpack(soul.slice(1));
+    var p = pen.scanpolicy(bc);
+    assert.deepStrictEqual(p.params, { candle: 5820000, item: 'organic-green-tea', type: 'buy' });
+    assert.strictEqual(pen.run(bc, ['k', 'hello', soul, 0, Date.now(), '']), true);
+  });
+
+  it('{ params } canonicalizes object key order before salting soul', function() {
+    var a = SEA.pen({ key: { type: 'string' }, params: { item: 'tea', type: 'buy', candle: 1 } });
+    var b = SEA.pen({ key: { type: 'string' }, params: { type: 'buy', candle: 1, item: 'tea' } });
+    assert.strictEqual(a, b);
+  });
+
+  it('different params produce different souls even when validator is identical', function() {
+    var a = SEA.pen({ key: { type: 'string' }, params: { item: 'tea', type: 'buy', candle: 1 } });
+    var b = SEA.pen({ key: { type: 'string' }, params: { item: 'tea', type: 'buy', candle: 2 } });
+    assert.notStrictEqual(a, b);
+  });
+
   it('sign + predicate: policy detected without polluting tree', function() {
     // A predicate with integer constants including values near 0xC0 range
     // Use a candle-like predicate with large integer: ensure no false positive
@@ -460,6 +490,7 @@ describe('pen.scanpolicy()', function() {
     assert.strictEqual(p.cert, null);
     assert.strictEqual(p.open, false);
     assert.strictEqual(p.pow, null);
+    assert.strictEqual(p.params, null);
   });
 
   it('detects multiple policies simultaneously', function() {
@@ -930,4 +961,3 @@ describe('SEA + PEN integration', function() {
   });
 
 });
-
