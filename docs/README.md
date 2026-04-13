@@ -10,7 +10,8 @@ This fork includes several major enhancements to GunDB's Security, Encryption, a
 2. **[Additive Key Derivation](./additive-derivation.md)** - Hierarchical deterministic (HD) wallet capabilities
 3. **[WebAuthn Integration](./webauthn.md)** - Hardware security keys and biometric authentication
 4. **[External Authenticators](./external-authenticators.md)** - Custom signing mechanisms and stateless operations
-5. **[`globalThis` Migration](./globalthis-worker-compat.md)** - Full Web Worker / Service Worker compatibility across all `lib/` modules
+5. **[OPFS Storage Adapter](./opfs.md)** - Origin Private File System persistence for RAD in modern browsers
+6. **[`globalThis` Migration](./globalthis-worker-compat.md)** - Full Web Worker / Service Worker compatibility across all `lib/` modules
 
 These features work together to provide enterprise-grade security, enhanced privacy, and modern authentication options.
 
@@ -73,9 +74,9 @@ SEA.base62.pubToJwkXY(pub)        // accepts both 87-char and 88-char pub
 
 ### Protocol & Architecture Drafts
 
-5. **[Hashgraph Layer on GunDB (Draft)](./hashgraph-layer.md)** - Event DAG, voting/finality, and execution bridge design
-6. **[Tilde Shard Index](./tilde-shard.md)** - Sharded public-key index under the `~` namespace with SEA-enforced write rules
-7. **[`globalThis` Migration — Web Worker Compat](./globalthis-worker-compat.md)** - All `lib/` modules migrated from `window` to `globalThis` for universal environment support
+7. **[Hashgraph Layer on GunDB (Draft)](./hashgraph-layer.md)** - Event DAG, voting/finality, and execution bridge design
+8. **[Tilde Shard Index](./tilde-shard.md)** - Sharded public-key index under the `~` namespace with SEA-enforced write rules
+9. **[`globalThis` Migration — Web Worker Compat](./globalthis-worker-compat.md)** - All `lib/` modules migrated from `window` to `globalThis` for universal environment support
 
 ---
 

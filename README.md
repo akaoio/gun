@@ -108,6 +108,7 @@ This fork includes **powerful enterprise-grade features** that significantly ext
 - 🔐 **[WebAuthn Integration](./docs/webauthn.md)** - Hardware security keys, Touch ID, Face ID, and passkey support
 - 🎯 **[External Authenticators](./docs/external-authenticators.md)** - Stateless operations with custom signing backends (HSM, KMS, etc.)
 - 🗂️ **[Tilde Shard Index](./docs/tilde-shard.md)** - SEA-enforced write rules for a sharded public-key discovery index
+- 💾 **[OPFS Storage Adapter](./docs/opfs.md)** - Origin Private File System persistence for RAD in modern browsers
 - 🔧 **[`globalThis` Web Worker Compat](./docs/globalthis-worker-compat.md)** - All `lib/` modules now run inside Web Workers, Service Workers, and Node.js without `window`
 
 **📖 [Read the complete documentation →](./docs/)**
