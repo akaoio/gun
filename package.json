@@ -28,8 +28,7 @@
     "unbuildSEA": "node lib/unbuild.js sea",
     "unbuildMeta": "node lib/unbuild.js lib/meta",
     "buildPEN": "node -e \"require('fs').copyFileSync('node_modules/@akaoio/pen/pen.wasm','lib/pen.wasm')\"",
-    "testPEN": "mocha test/pen.js --timeout 10000",
-    "buildESM": "node lib/build.js gun-esm && node lib/build.js sea-esm && node lib/build-lib-esm.js"
+    "testPEN": "mocha test/pen.js --timeout 10000"
   },
   "repository": {
     "type": "git",
@@ -82,42 +81,5 @@
     "ip": "^1.1.5",
     "mocha": "^6.2.0",
     "uglify-js": "^3.6.0"
-  },
-  "module": "gun.esm.js",
-  "exports": {
-    ".": {
-      "import": "./gun.esm.js",
-      "require": "./index.js",
-      "default": "./index.js"
-    },
-    "./sea": {
-      "import": "./sea.esm.js",
-      "require": "./sea.js",
-      "default": "./sea.js"
-    },
-    "./lib/radix": {
-      "import": "./lib/radix.esm.js",
-      "require": "./lib/radix.js"
-    },
-    "./lib/radisk": {
-      "import": "./lib/radisk.esm.js",
-      "require": "./lib/radisk.js"
-    },
-    "./lib/opfs": {
-      "import": "./lib/opfs.esm.js",
-      "require": "./lib/opfs.js"
-    },
-    "./lib/rindexed": {
-      "import": "./lib/rindexed.esm.js",
-      "require": "./lib/rindexed.js"
-    },
-    "./lib/store": {
-      "import": "./lib/store.esm.js",
-      "require": "./lib/store.js"
-    },
-    "./lib/pen": {
-      "import": "./lib/pen.esm.js",
-      "require": "./lib/pen.js"
-    }
   }
 }
