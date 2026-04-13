@@ -21,3 +21,5 @@ isolate*.log
 temp/
 tmp/
 .well-known/
+playwright-report/
+test-results/

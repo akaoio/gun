@@ -243,6 +243,8 @@ I am missing many others, apologies, will be adding them soon! This list is infi
 
 You will need to `npm install -g mocha` first. Then in the gun root folder run `npm test`. Tests will trigger persistent writes to the DB, so subsequent runs of the test will fail. You must clear the DB before running the tests again. This can be done by running `rm -rf *data*` command in the project directory.
 
+For browser automation, install Playwright's Chromium bundle once with `npm run test:browser:setup`, then run `npm run test:browser`. This launches a real browser against a local test page that loads `gun.js` plus the RAD browser plugins.
+
 ## Shims
 
  > These are only needed for NodeJS & React Native, they shim the native Browser WebCrypto API.

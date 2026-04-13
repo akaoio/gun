@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>GUN Browser Tests</title>
+</head>
+<body>
+  <div id="ready">loading</div>
+
+  <script src="/gun.js"></script>
+  <script src="/lib/opfs.js"></script>
+  <script src="/lib/radix.js"></script>
+  <script src="/lib/radisk.js"></script>
+  <script src="/lib/store.js"></script>
+  <script src="/lib/rindexed.js"></script>
+  <script>
+    (function(){
+      var current = {};
+
+      function makeStore(kind, opt) {
+        if ('opfs' === kind) { return ROPFS(opt) }
+        return RindexedDB(opt);
+      }
+
+      function gunFor(kind, file) {
+        var id = kind + '::' + file;
+        if (current[id]) { return current[id] }
+        var opt = {
+          file: file,
+          localStorage: false,
+          radisk: true
+        };
+        opt.store = makeStore(kind, opt);
+        current[id] = Gun(opt);
+        return current[id];
+      }
+
+      function deleteDatabase(name) {
+        return new Promise(function(resolve, reject) {
+          var req = indexedDB.deleteDatabase(name);
+          req.onsuccess = function() { resolve(true); };
+          req.onerror = function() { reject(req.error || new Error('deleteDatabase failed')); };
+          req.onblocked = function() { reject(new Error('deleteDatabase blocked')); };
+        });
+      }
+
+      function readKeys(name) {
+        return new Promise(function(resolve, reject) {
+          var open = indexedDB.open(name);
+          open.onerror = function() {
+            reject(open.error || new Error('indexedDB.open failed'));
+          };
+          open.onsuccess = function() {
+            var db = open.result;
+            if (!db.objectStoreNames.contains(name)) {
+              db.close();
+              resolve([]);
+              return;
+            }
+            var tx = db.transaction([name], 'readonly');
+            var store = tx.objectStore(name);
+            if (store.getAllKeys) {
+              var req = store.getAllKeys();
+              req.onerror = function() {
+                db.close();
+                reject(req.error || new Error('getAllKeys failed'));
+              };
+              req.onsuccess = function() {
+                db.close();
+                resolve(req.result || []);
+              };
+              return;
+            }
+            var keys = [];
+            var cursor = store.openCursor();
+            cursor.onerror = function() {
+              db.close();
+              reject(cursor.error || new Error('openCursor failed'));
+            };
+            cursor.onsuccess = function(event) {
+              var item = event.target.result;
+              if (!item) {
+                db.close();
+                resolve(keys);
+                return;
+              }
+              keys.push(item.key);
+              item.continue();
+            };
+          };
+        });
+      }
+
+      function opfsRoot() {
+        return navigator.storage.getDirectory();
+      }
+
+      function opfsDir(name, create) {
+        return opfsRoot().then(function(root) {
+          return root.getDirectoryHandle(name, {create: !!create});
+        });
+      }
+
+      function clearOPFS(name) {
+        return opfsRoot().then(function(root) {
+          return root.removeEntry(name, {recursive: true});
+        }).catch(function(err) {
+          if (err && 'NotFoundError' === err.name) { return }
+          throw err;
+        });
+      }
+
+      function listOPFSKeys(name) {
+        return opfsDir(name).then(async function(dir) {
+          var keys = [];
+          for await (var entry of dir.keys()) {
+            keys.push(entry);
+          }
+          return keys;
+        }).catch(function(err) {
+          if (err && 'NotFoundError' === err.name) { return [] }
+          throw err;
+        });
+      }
+
+      function putValue(kind, file, soul, key, value) {
+        return new Promise(function(resolve, reject) {
+          gunFor(kind, file).get(soul).get(key).put(value, function(ack) {
+            if (ack && ack.err) {
+              reject(new Error(String(ack.err)));
+              return;
+            }
+            setTimeout(function() {
+              resolve(ack || {ok: 1});
+            }, 50);
+          });
+        });
+      }
+
+      function onceValue(kind, file, soul, key, wait) {
+        wait = wait || 4000;
+        return new Promise(function(resolve, reject) {
+          var done;
+          var to = setTimeout(function() {
+            if (done) { return }
+            done = true;
+            reject(new Error('Timed out waiting for data'));
+          }, wait);
+          gunFor(kind, file).get(soul).get(key).once(function(data) {
+            if (done) { return }
+            done = true;
+            clearTimeout(to);
+            resolve(data);
+          });
+        });
+      }
+
+      window.browserTests = {
+        clearIndexedDB: deleteDatabase,
+        clearOPFS: clearOPFS,
+        listIndexedDBKeys: readKeys,
+        listOPFSKeys: listOPFSKeys,
+        putValue: putValue,
+        onceValue: onceValue,
+        plugins: function() {
+          return {
+            Gun: typeof Gun !== 'undefined',
+            ROPFS: typeof ROPFS !== 'undefined',
+            Radix: typeof Radix !== 'undefined',
+            Radisk: typeof Radisk !== 'undefined',
+            RindexedDB: typeof RindexedDB !== 'undefined'
+          };
+        }
+      };
+
+      document.getElementById('ready').textContent = 'ready';
+    }());
+  </script>
+</body>
+</html>

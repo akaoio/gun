@@ -15,6 +15,8 @@
     "prepublishOnly": "npm run buildGUN",
     "clean": "node -e \"['radata','data'].forEach(function(d){try{require('fs').rmSync(d,{recursive:true,force:true})}catch(e){}})\"",
     "test": "npm run clean && echo 'Did you run PANIC holy-grail, 1~X, on-recover, etc.?' && mocha",
+    "test:browser": "playwright test",
+    "test:browser:setup": "playwright install chromium",
     "testSEA": "npm run clean && mocha test/sea/sea.js",
     "e2e": "mocha e2e/distributed.js",
     "docker": "hooks/build",
@@ -73,6 +75,7 @@
   },
   "devDependencies": {
     "@akaoio/pen": "github:akaoio/pen",
+    "@playwright/test": "^1.59.1",
     "aws-sdk": "^2.528.0",
     "emailjs": "^2.2.0",
     "ip": "^1.1.5",

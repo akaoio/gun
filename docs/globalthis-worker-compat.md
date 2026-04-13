@@ -107,6 +107,7 @@ With this migration you can now use GUN (including storage adapters) directly in
 ```js
 // worker.js  (type: "module")
 import Gun from '/gun.js'
+import '/lib/opfs.js'      // OPFS — Worker-safe where supported
 import '/lib/radisk.js'    // RAD storage — now Worker-safe
 import '/lib/rindexed.js'  // IndexedDB — now Worker-safe
 
@@ -124,7 +125,7 @@ const worker = new Worker('/worker.js', { type: 'module' })
 worker.onmessage = ({ data }) => console.log(data)
 ```
 
-Storage adapters that depend on browser-only APIs (`localStorage`, `indexedDB`) are already available inside Workers in all modern browsers — the `globalThis` migration ensures GUN can reach them.
+Storage adapters that depend on browser-only APIs (`localStorage`, `indexedDB`, `navigator.storage`) are already available inside Workers in modern browsers where those APIs exist — the `globalThis` migration ensures GUN can reach them.
 
 ---
 

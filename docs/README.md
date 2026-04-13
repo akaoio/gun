@@ -342,7 +342,7 @@ gun.get(leafSoul).get(leafKey).put(pair.pub, null, { opt: { authenticator: pair 
 
 This makes GUN's entire library layer runnable in Web Workers, Service Workers, Node.js, and any non-browser JavaScript environment:
 - Every `window` reference in `lib/*.js` replaced with `globalThis`
-- Storage adapters (`rindexed.js`, `radisk.js`, `rls.js`) self-register on `globalThis` — discoverable inside Workers
+- Storage adapters (`opfs.js`, `rindexed.js`, `radisk.js`, `rls.js`) self-register on `globalThis` — discoverable inside Workers
 - `Gun` class resolution from global scope works in all environments
 - `Gun.window` property retained as an internal sentential — set to `globalThis` when running in a Worker
 - DOM-dependent helpers (`dom.js`, `fun.js`) silently no-op in headless environments
@@ -350,6 +350,7 @@ This makes GUN's entire library layer runnable in Web Workers, Service Workers, 
 ```javascript
 // worker.js — GUN now works fully inside a Web Worker
 import Gun from '/gun.js'
+import '/lib/opfs.js'       // OPFS — Worker-safe where supported
 import '/lib/rindexed.js'   // IndexedDB — Worker-safe
 
 const gun = Gun({ peers: ['https://relay.example.com/gun'] })
