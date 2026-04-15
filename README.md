@@ -1,3 +1,9 @@
+# THIS FORK IS ABANDONED
+
+This repo is bandoned and is being kept just as a legacy repo for code mining. **New repo:** [ZEN](https://github.com/akaoio/zen). ZEN = Zen Entropy Network, yet another GUN decendant but much different.
+
+=========
+
 <p id="readme"><a href="https://gun.eco/"><img width="40%" src="https://cldup.com/TEy9yGh45l.svg"/></a><img width="50%" align="right" vspace="25" src="https://gun.eco/see/demo.gif"/></p>
 
 [![](https://data.jsdelivr.com/v1/package/npm/gun/badge)](https://www.jsdelivr.com/package/npm/gun)
